@@ -16,7 +16,7 @@ var (
 		expected string
 	}{
 		{"On Deck Capital, Inc.", "ondeckcapital"},
-		{"ROCKWALL CAPITAL L.L.C.", "rockwallcapitall.l.c."},
+		{"ROCKWALL CAPITAL L.L.C.", "rockwallcapital"},
 		{"CNH Capital America LLC  ", "cnhcapitalamerica"},
 		{" INNOVATIVE EQUIPMENT TECHNOLOGY, INC.", "innovativeequipmenttechnology"},
 	}
@@ -49,7 +49,7 @@ func ShowOutputs(d Dispatcher, w io.Writer) {
 func TestDispatcher(t *testing.T) {
 	fmt.Println("### TESTING the dispatcher")
 	Parser := XmlParser{
-		FileDir:  "/media/FD/MISSIONS/ALEX/UM20140215_X/",
+		FileDir:  "_test/", ///media/FD/MISSIONS/ALEX/UM20140215_X/",
 		FileName: "UMtest.xml",
 	}
 	cs := make(chan Filing)

@@ -9,8 +9,8 @@ import (
 
 // Bloc Subfunctions
 func Atomize(s string) string {
-	re := regexp.MustCompile(",? +(inc|llc|as representative|p.c.|co).?")
-	re2 := regexp.MustCompile(" ")
+	re := regexp.MustCompile(",? +(inc|l\\.?l\\.?c|as representative|p.c.|co|as agent).?")
+	re2 := regexp.MustCompile(" |\\.|\\,")
 	return re2.ReplaceAllString(re.ReplaceAllString(strings.ToLower(s), ""), "")
 }
 
@@ -53,11 +53,16 @@ type FilingEdger struct {
 }
 
 func (f *Filing) NewFilingEdger(kind EdgeKind, srcId string, dstId string) FilingEdger {
+	if dstId < srcId {
+		temp := dstId
+		dstId = srcId
+		srcId = temp
+	}
 	return FilingEdger{srcId, dstId, kind, f}
 }
 
 func (fe FilingEdger) GetIdentifier() string {
-	return strconv.Itoa(fe.filing.OriginalFileNumber)
+	return fe.GetSrcId() + "_" + strconv.Itoa(fe.filing.OriginalFileNumber) + "_" + fe.GetDstId()
 }
 
 func (fe FilingEdger) GetKind() EdgeKind {
