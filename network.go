@@ -538,6 +538,16 @@ func (n *Network) CheckSubNetwork(subNetwork map[string]bool) bool {
 	}
 	return true
 }
+func (n *Network) CheckSubNetworkNodes(subNetwork map[*Node]bool) bool {
+	for nn, _ := range subNetwork {
+		for _, ne := range nn.Edges {
+			if !subNetwork[ne.ToNode] {
+				return false
+			}
+		}
+	}
+	return true
+}
 
 //-----------------------
 //SECTION 4: SUBNETWORK DETECTION
@@ -719,10 +729,11 @@ func DetectSubs(startNode *Node, maxN int) (map[string]bool, bool) {
 //"Wanderer", is a non recursive re-writing of the DetectSubVertical to make it concurrent
 //in the bigger picture.
 type SimpleWanderer struct {
-	Moignons *SLifo
+	Moignons   *SLifo
+	SubNetwork map[string]bool
 }
 
-func (sw *SimpleWanderer) Wander(startNode *Node, maxN int) (map[string]bool, bool) {
+func (sw *SimpleWanderer) DetectSubs(startNode *Node, maxN int) (map[string]bool, bool) {
 	//Initialization
 	subNetwork := map[string]bool{
 		startNode.Name: true,
@@ -771,3 +782,84 @@ func (sw *SimpleWanderer) Wander(startNode *Node, maxN int) (map[string]bool, bo
 	}
 	return subNetwork, false
 }
+
+//Wandering function, similar to the DetectSub above, but with embedded duplicity to enable
+//lightweight communication
+func (sw *SimpleWanderer) Wander(startNode *Node, maxN int) (map[*Node]bool, bool) {
+	//Initialization
+	sw.SubNetwork[startNode.Name] = true
+	subNetworkIncrement := map[*Node]bool{
+		startNode: true,
+	}
+	if len(startNode.Edges) > 1 {
+		for _, e := range startNode.Edges[1:] {
+			n := e.ToNode
+			sw.SubNetwork[n.Name] = true
+			subNetworkIncrement[n] = true
+			sw.Moignons.Push(e.ToNode)
+		}
+	}
+	// Add the first Node
+	n := startNode.Edges[0].ToNode
+	currentNode := n
+	sw.SubNetwork[n.Name] = true
+	subNetworkIncrement[n] = true
+	//Wander for maxN steps
+	for i := 0; i < maxN; i++ {
+		// fmt.Printf("Wandering on Node %p with stack %v :\n", currentNode, sw.Moignons) //DEBUG
+		hasNext := false
+		for _, e := range currentNode.Edges {
+			n := e.ToNode
+			// fmt.Printf("Trying Node %p with stack %v :\n", n, sw.Moignons) //DEBUG
+			if !sw.SubNetwork[n.Name] {
+				sw.SubNetwork[n.Name] = true
+				subNetworkIncrement[n] = true
+				if len(n.Edges) != 1 { // That would be a dead-end
+					if hasNext {
+						sw.Moignons.Push(n)
+					} else {
+						hasNext = true
+						currentNode = n
+					}
+				}
+			}
+		}
+		if !hasNext { //Go back to the most recent Moignon or exit if done
+			if len(*sw.Moignons) > 0 {
+				currentNode = sw.Moignons.Pop()
+			} else {
+				return subNetworkIncrement, true
+			}
+		}
+	}
+	return subNetworkIncrement, false
+}
+
+type Order int
+
+const (
+	Done Order = iota
+	Continue
+	Break
+)
+
+type comSubN struct {
+	cSubN  chan map[string]bool
+	cOrder chan Order
+}
+
+// func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com comSubN) {
+// 	wanderer := SimpleWanderer{&SLifo{}, make(map[string]bool)}
+// 	for {
+// 		goAhead := <-com.cOrder
+// 		switch goAhead {
+// 		case Continue:
+// 		default:
+// 			panic("WANDERSTEP: problem of communication")
+// 		}
+// 		subN, done := wanderer.Wander(startNode, maxN)
+// 		if done {
+
+// 		}
+// 	}
+// }

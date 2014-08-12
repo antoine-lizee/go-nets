@@ -157,6 +157,7 @@ func (b MajBool) String() string {
 
 type SubsResults struct {
 	method        func(*Node, int) (map[string]bool, bool)
+	methodNodes   func(*Node, int) (map[*Node]bool, bool)
 	methodName    string
 	maxN          int
 	isSub, isSub2 bool
@@ -178,6 +179,18 @@ func (sb SubsResults) testSub(sNode *Node, network *Network) SubsResults {
 	// 	fmt.Printf("%p ", network.Nodes[nName])
 	// }
 	// fmt.Println("")
+	return sb
+}
+
+func (sb SubsResults) testSubNode(sNode *Node, network *Network) SubsResults {
+	t0 := time.Now()
+	subN, isSub := sb.methodNodes(sNode, sb.maxN)
+	sb.t1 = time.Now().Sub(t0)
+	t0 = time.Now()
+	isSub2 := network.CheckSubNetworkNodes(subN)
+	sb.t2 = time.Now().Sub(t0)
+	sb.isSub, sb.isSub2 = isSub, isSub2
+	sb.sizeSub = len(subN)
 	return sb
 }
 
@@ -238,9 +251,13 @@ func TestSubs(t *testing.T) {
 		M3 := SubsResults{method: CcrDetectSubsVertical, methodName: "Concurrent Depth-First", maxN: 3 * maxN}
 		M3.testSub(sNode, &network).Print(debug)
 		//Method #4
-		sw := SimpleWanderer{&SLifo{}}
-		M4 := SubsResults{method: sw.Wander, methodName: "Iterative Depth-First", maxN: 10000 * maxN}
+		sw := SimpleWanderer{&SLifo{}, nil}
+		M4 := SubsResults{method: sw.DetectSubs, methodName: "Iterative Depth-First", maxN: 10000 * maxN}
 		M4.testSub(sNode, &network).Print(debug)
+		//Method #5
+		sw = SimpleWanderer{&SLifo{}, make(map[string]bool)}
+		M5 := SubsResults{methodNodes: sw.Wander, methodName: "Iterative Depth-First", maxN: 10000 * maxN}
+		M5.testSubNode(sNode, &network).Print(debug)
 
 	}
 
