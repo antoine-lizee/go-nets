@@ -196,7 +196,7 @@ func (sb SubsResults) testSubNode(sNode *Node, network *Network) SubsResults {
 
 func (sb SubsResults) Print(debug bool) {
 	if debug {
-		fmt.Println("-- Method #1", sb.methodName, " with maxN =", sb.maxN)
+		fmt.Println("-- Method", sb.methodName, " with maxN =", sb.maxN)
 		// fmt.Println("Found a subNetwork with", len(subN), "nodes, that is", notString[isSub], "supposed to be complete in", time.Now().Sub(t0))
 		fmt.Printf("NODES: %d - (%v)\n", sb.sizeSub, sb.t1)
 		// fmt.Println("Subnetwork verified: it is", notString[isSub2], "complete. (", time.Now().Sub(t0), ")")
@@ -255,10 +255,33 @@ func TestSubs(t *testing.T) {
 		M4 := SubsResults{method: sw.DetectSubs, methodName: "Iterative Depth-First", maxN: 10000 * maxN}
 		M4.testSub(sNode, &network).Print(debug)
 		//Method #5
-		sw = SimpleWanderer{&SLifo{}, make(map[string]bool)}
-		M5 := SubsResults{methodNodes: sw.Wander, methodName: "Iterative Depth-First", maxN: 10000 * maxN}
+		sw = SimpleWanderer{&SLifo{}, make(map[*Node]bool)}
+		M5 := SubsResults{methodNodes: sw.Wander, methodName: "Duplicating Iterative Depth-First", maxN: 10000 * maxN}
 		M5.testSubNode(sNode, &network).Print(debug)
+		//
 
 	}
+}
 
+func TestCrunching(t *testing.T) {
+	fmt.Println("Total Number of cores:", runtime.NumCPU())
+	nCores := 4
+	fmt.Println("Enabling parallelisation with", nCores, "cores")
+	runtime.GOMAXPROCS(nCores)
+
+	//Loading the network
+	fmt.Println("Loading network")
+	t0 := time.Now()
+	network := NewNetwork("Test2", nil, testFolder, "Network1.sqlite")
+	network.Load()
+	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
+	network.Summary(os.Stdout)
+
+	//Crunch the network:
+	net := NewNet()
+	t0 = time.Now()
+	net.CrunchNetwork(network)
+	d1 := time.Now().Sub(t0)
+	fmt.Println("Crunched the network in", d1, "- Summary:")
+	net.Summary()
 }

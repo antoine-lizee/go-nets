@@ -725,12 +725,58 @@ func DetectSubs(startNode *Node, maxN int) (map[string]bool, bool) {
 	return subNetwork, false
 }
 
-//D.
+//D. Crunching the whole Network now.
+type Net struct {
+	NodeMap     map[*Node]int
+	SubNetworks map[int]map[*Node]bool
+}
+
+func NewNet() *Net {
+	return &Net{make(map[*Node]int), make(map[int][]*Node)}
+}
+
+func (net *Net) Summary(w io.Writer) {
+	if w == nil {
+		w = os.Stdout
+	}
+	fmt.Fprintln(w, "Summary for the net:")
+	fmt.Fprintf(w, "%d nodes in %d subnetworks.\n", len(net.NodeMap), len(net.SubNetworks))
+	for iSub, nodes := range net.SubNetworks {
+		fmt.Fprintf(w, "SubNetwork %5d: %10d nodes.\n", iSub, len(nodes))
+	}
+}
+
+func (net *Net) AddSub(subN *Network) {
+	iSub := len(net.SubNetworks)
+	net.SubNetworks[iSub] = subN
+	for k, _ := range subN {
+		net.NodeMap[k] = iSub
+	}
+}
+
+func (net *Net) CrunchNetwork(n *Network) {
+	for _, node := range n.Nodes {
+		if net.NodeMap[node] > 0 {
+			continue
+		}
+		subN, isSub := DetectSubsVertical(node, 1.2*len(n.Nodes))
+		if !isSub {
+			panic("CRUNCHNETWORK: maximum iteration number is not enough to detect the biggest subnetwork")
+		}
+		net.AddSub(subN)
+	}
+}
+
+//E.
 //"Wanderer", is a non recursive re-writing of the DetectSubVertical to make it concurrent
 //in the bigger picture.
 type SimpleWanderer struct {
 	Moignons   *SLifo
-	SubNetwork map[string]bool
+	SubNetwork map[*Node]bool
+}
+
+func NewSimpleWanderer() *SimpleWanderer {
+	return SimpleWanderer{&SLifo{}, make(map[*Node]bool)}
 }
 
 func (sw *SimpleWanderer) DetectSubs(startNode *Node, maxN int) (map[string]bool, bool) {
@@ -787,14 +833,14 @@ func (sw *SimpleWanderer) DetectSubs(startNode *Node, maxN int) (map[string]bool
 //lightweight communication
 func (sw *SimpleWanderer) Wander(startNode *Node, maxN int) (map[*Node]bool, bool) {
 	//Initialization
-	sw.SubNetwork[startNode.Name] = true
+	sw.SubNetwork[startNode] = true
 	subNetworkIncrement := map[*Node]bool{
 		startNode: true,
 	}
 	if len(startNode.Edges) > 1 {
 		for _, e := range startNode.Edges[1:] {
 			n := e.ToNode
-			sw.SubNetwork[n.Name] = true
+			sw.SubNetwork[n] = true
 			subNetworkIncrement[n] = true
 			sw.Moignons.Push(e.ToNode)
 		}
@@ -802,7 +848,7 @@ func (sw *SimpleWanderer) Wander(startNode *Node, maxN int) (map[*Node]bool, boo
 	// Add the first Node
 	n := startNode.Edges[0].ToNode
 	currentNode := n
-	sw.SubNetwork[n.Name] = true
+	sw.SubNetwork[n] = true
 	subNetworkIncrement[n] = true
 	//Wander for maxN steps
 	for i := 0; i < maxN; i++ {
@@ -811,8 +857,8 @@ func (sw *SimpleWanderer) Wander(startNode *Node, maxN int) (map[*Node]bool, boo
 		for _, e := range currentNode.Edges {
 			n := e.ToNode
 			// fmt.Printf("Trying Node %p with stack %v :\n", n, sw.Moignons) //DEBUG
-			if !sw.SubNetwork[n.Name] {
-				sw.SubNetwork[n.Name] = true
+			if !sw.SubNetwork[n] {
+				sw.SubNetwork[n] = true
 				subNetworkIncrement[n] = true
 				if len(n.Edges) != 1 { // That would be a dead-end
 					if hasNext {
@@ -841,25 +887,83 @@ const (
 	Done Order = iota
 	Continue
 	Break
+	Merge
 )
 
-type comSubN struct {
-	cSubN  chan map[string]bool
-	cOrder chan Order
+type WandererCom struct {
+	cSubN     chan map[*Node]bool
+	cOrder    chan Order
+	cWanderer chan *SimpleWanderer
 }
 
-// func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com comSubN) {
-// 	wanderer := SimpleWanderer{&SLifo{}, make(map[string]bool)}
-// 	for {
-// 		goAhead := <-com.cOrder
-// 		switch goAhead {
-// 		case Continue:
-// 		default:
-// 			panic("WANDERSTEP: problem of communication")
-// 		}
-// 		subN, done := wanderer.Wander(startNode, maxN)
-// 		if done {
+func NewWandererCom() *WandererCom {
+	return WandererCom{
+		make(chan map[*Node]bool),
+		make(chan Order),
+		make(chan *SimpleWanderer),
+	}
+}
 
+func (sw *SimpleWanderer) Merge(sw2 *SimpleWanderer) {
+	// Merge the stack
+	for len(sw2.Moignons) > 0 {
+		sw.Moignons.Push(sw2.Moignons.Pop())
+	}
+	//Merge the subnetworks
+	for n, _ := range sw2.SubNetwork {
+		sw.SubNetwork[n] = true
+	}
+}
+
+func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com WandererCom) {
+	subN := make(map[*Node]bool) //Incremental subnetwork
+	for {
+		//Wander for stepSize
+		subN, done := sw.Wander(startNode, stepSize)
+		//Receive orders
+		switch <-com.cOrder {
+		case Continue: // Go on!
+		case Break: // Stop and pass the subNetwork & the wanderer for merging
+			com.cSubN <- sw.SubNetwork
+			com.cWanderer <- &sw
+			return
+		case Merge: //Merge with an other wanderer and go on
+			sw.Merge(<-com.cWanderer)
+		default:
+			panic("WANDERSTEP: problem of communication")
+		}
+		if done {
+			com.cOrder <- Done
+			com.cSubN <- sw.SubNetwork
+			return
+		} else {
+			//Ask for Status
+			com.cOrder <- Continue //Ask for permission to continue
+			com.cSubN <- subN
+		}
+	}
+}
+
+// func (net *Net) CcrCrunchNetwork(n *Network, maxW int, stepSize int) {
+// 	//Initialize the stuff
+// 	comObjects := []*WandererCom{}
+// 	wanderers := []*SimpleWanderer{}
+// 	i:=0
+// 	for _, node := range n.Nodes { // Populate with the number of wanderers
+// 		if i == maxW { // Stop at maxW
+// 			break
+// 		}
+// 		comObjects[i] = NewWandererCom()
+// 		wanderers[i] = NewSimpleWanderer()
+// 		go wanderers[i].WanderStep()
+// 		i++
+// 		}
+// 	}
+// 	// Listen and dispatch.
+// 	for {
+// 		for i:=0; i < maxW; i++ {
+// 			select
+// 			net.Dispatch(comObjects[i])
 // 		}
 // 	}
 // }
