@@ -1,4 +1,4 @@
-go_nets
+go-nets
 =======
 
 Network representation of data & analyses in Go. 

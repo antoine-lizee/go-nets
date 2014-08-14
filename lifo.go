@@ -1,5 +1,5 @@
 //Super simple implementation of a non-concurrent safe LIFO stack for the wanderer.
-package go_nets
+package go-nets
 
 type LIFO interface {
 	Push(*Node)
