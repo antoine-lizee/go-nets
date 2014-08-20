@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"sort"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -773,18 +774,39 @@ func NewNet() *Net {
 }
 
 func (net *Net) Summary(w io.Writer) {
+	//arguments unpacking
 	if w == nil {
 		w = os.Stdout
 	}
-	fmt.Fprintln(w, "Summary for the net:")
-	fmt.Fprintf(w, "%d nodes in %d subnetworks.\n", len(net.NodeMap), len(net.SubNetworks))
-	for iSub, nodes := range net.SubNetworks {
-		fmt.Fprintf(w, "SubNetwork %5d: %10d nodes.\n", iSub, len(nodes))
+	//Initialize & populate the counting map
+	subNcounts := make(map[int][]int)
+	for iSub, nodes := range net.SubNetworks { //Iterate through the Net of subnetworks
+		subNcounts[len(nodes)] = append(subNcounts[len(nodes)], iSub)
 	}
+	var keys []int
+	for size := range subNcounts {
+		keys = append(keys, size)
+	}
+	sort.Ints(keys)
+	fmt.Fprintln(w, "Summary for the net:")
+	for _, size := range keys {
+		iSubs := subNcounts[size]
+		liSubs := len(iSubs)
+		iSub1 := -1
+		if liSubs > 1 {
+			iSub1 = iSubs[1]
+		}
+		fmt.Fprintf(w, "%10d SubNetwork with %8d nodes. (%v, %v)\n", len(iSubs), size, iSubs[0], iSub1)
+	}
+	fmt.Fprintf(w, "%d nodes in %d subnetworks.\n", len(net.NodeMap), len(net.SubNetworks))
 }
 
 func (net *Net) AddSub(subN map[*Node]bool) {
 	iSub := len(net.SubNetworks)
+	if iSub == 0 {
+		net.SubNetworks[0] = make(map[*Node]bool)
+		iSub = 1
+	}
 	net.SubNetworks[iSub] = subN
 	for k, _ := range subN {
 		net.NodeMap[k] = iSub
