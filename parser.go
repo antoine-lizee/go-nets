@@ -1,4 +1,4 @@
-package go-nets
+package go_nets
 
 import (
 	"encoding/xml"

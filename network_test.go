@@ -242,11 +242,14 @@ func TestSubs(t *testing.T) {
 		fmt.Printf("\n## Selecting node %.50s (...) and searching for subnetwork linked to it...\n", sNode.Name)
 		debug := false
 		//Method #1
-		M1 := SubsResults{method: DetectSubs, methodName: "Width-First", maxN: maxN}
+		M1 := SubsResults{method: DetectSubsLegacy, methodName: "Width-First", maxN: maxN}
 		M1.testSub(sNode, &network).Print(debug)
+		//Method #1BIS
+		M12 := SubsResults{methodNodes: DetectSubs, methodName: "Width-First, Node keyed map", maxN: maxN}
+		M12.testSubNode(sNode, &network).Print(debug)
 		//Method #2
-		M2 := SubsResults{method: DetectSubsVertical, methodName: "Recursive Depth-First", maxN: 10000 * maxN}
-		M2.testSub(sNode, &network).Print(debug)
+		M2 := SubsResults{methodNodes: DetectSubsVertical, methodName: "Recursive Depth-First", maxN: 10000 * maxN}
+		M2.testSubNode(sNode, &network).Print(debug)
 		//Method #3
 		M3 := SubsResults{method: CcrDetectSubsVertical, methodName: "Concurrent Depth-First", maxN: 3 * maxN}
 		M3.testSub(sNode, &network).Print(debug)
@@ -280,8 +283,8 @@ func TestCrunching(t *testing.T) {
 	//Crunch the network:
 	net := NewNet()
 	t0 = time.Now()
-	net.CrunchNetwork(network)
+	net.CrunchNetwork(&network)
 	d1 := time.Now().Sub(t0)
 	fmt.Println("Crunched the network in", d1, "- Summary:")
-	net.Summary()
+	net.Summary(nil)
 }

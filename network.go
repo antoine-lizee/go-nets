@@ -554,9 +554,9 @@ func (n *Network) CheckSubNetworkNodes(subNetwork map[*Node]bool) bool {
 //A.
 //"Depth-first": this will not allow a detection of a short wide subnetwork when limited in steps.
 //Could be useful for greedy subnetwork search. The most efficient in term of checks.
-func DetectSubsVertical(startNode *Node, maxN int) (map[string]bool, bool) {
-	subNetwork := make(map[string]bool)
-	subNetwork[startNode.Name] = true
+func DetectSubsVertical(startNode *Node, maxN int) (map[*Node]bool, bool) {
+	subNetwork := make(map[*Node]bool)
+	subNetwork[startNode] = true
 	for _, e := range startNode.Edges {
 		if !detectSubsVertical(e.ToNode, maxN-1, subNetwork) {
 			// fmt.Println("") //DEBUG
@@ -568,18 +568,18 @@ func DetectSubsVertical(startNode *Node, maxN int) (map[string]bool, bool) {
 }
 
 //Subfunction
-func detectSubsVertical(startNode *Node, maxN int, subNetwork map[string]bool) bool {
+func detectSubsVertical(startNode *Node, maxN int, subNetwork map[*Node]bool) bool {
 	// fmt.Println("new detection on node", startNode, "for maxN", maxN) //DEBUG
 	// fmt.Printf("%d ", maxN) //DEBUG
 	if maxN == 0 { // End of the research
 		return false
 	}
-	subNetwork[startNode.Name] = true
+	subNetwork[startNode] = true
 	if len(startNode.Edges) == 1 { // This is a dead-end (the only edge is the one it comes from)
 		return true
 	}
 	for _, e := range startNode.Edges {
-		if !subNetwork[e.ToNode.Name] && !detectSubsVertical(e.ToNode, maxN-1, subNetwork) {
+		if !subNetwork[e.ToNode] && !detectSubsVertical(e.ToNode, maxN-1, subNetwork) {
 			return false
 		}
 	}
@@ -681,7 +681,44 @@ func ccrDetectSubsVertical(startNode *Node, maxN int, subNetwork *ccrSubNetwork,
 
 //C.
 //"Stepwise Wide first": potentially slow but no false negatives. Useful because MaxSteps has a meaning.
-func DetectSubs(startNode *Node, maxN int) (map[string]bool, bool) {
+func DetectSubs(startNode *Node, maxN int) (map[*Node]bool, bool) {
+	subNetwork := make(map[*Node]bool)
+	//Preparation of the first step
+	subNetwork[startNode] = true
+	counter := 0 // DEBUG
+	// nextNodes := []*Node{} // AL: Slices are a very bad idea here. NextNodei will end up with multiple checks of the same guy...
+	nextNodes := make(map[*Node]bool)
+	// fmt.Printf("Wandering on node %p \n", startNode) //DEBUG
+	for _, e := range startNode.Edges {
+		// fmt.Printf("%p ", e.ToNode) //DEBUG
+		n := e.ToNode
+		subNetwork[n] = true // Add the node
+		nextNodes[n] = true
+		counter++
+	}
+	fmt.Println("")
+	//Launching iteration per step of "depth"
+	for i := 0; i < maxN; i++ {
+		nextNodesi := make(map[*Node]bool)
+		for n, _ := range nextNodes { // Iterate over the nodes we need to discover
+			for _, e := range n.Edges { // Check the different edges of the node under discovery
+				if n := e.ToNode; !subNetwork[n] { // If not present, add to the nodes to discover.
+					subNetwork[n] = true // Add the node
+					nextNodesi[n] = true
+					counter++
+				}
+			}
+		}
+		if len(nextNodesi) == 0 { //No New Nodes to discover, we're done
+			return subNetwork, true
+		}
+		nextNodes = nextNodesi
+	}
+	return subNetwork, false
+}
+
+//Old method with string-keyed maps as subnetwork (NEEDS CLEANING!)
+func DetectSubsLegacy(startNode *Node, maxN int) (map[string]bool, bool) {
 	subNetwork := make(map[string]bool)
 	//Preparation of the first step
 	subNetwork[startNode.Name] = true
@@ -732,7 +769,7 @@ type Net struct {
 }
 
 func NewNet() *Net {
-	return &Net{make(map[*Node]int), make(map[int][]*Node)}
+	return &Net{make(map[*Node]int), make(map[int]map[*Node]bool)}
 }
 
 func (net *Net) Summary(w io.Writer) {
@@ -746,7 +783,7 @@ func (net *Net) Summary(w io.Writer) {
 	}
 }
 
-func (net *Net) AddSub(subN *Network) {
+func (net *Net) AddSub(subN map[*Node]bool) {
 	iSub := len(net.SubNetworks)
 	net.SubNetworks[iSub] = subN
 	for k, _ := range subN {
@@ -755,11 +792,12 @@ func (net *Net) AddSub(subN *Network) {
 }
 
 func (net *Net) CrunchNetwork(n *Network) {
+	maxNratio := 1.2
 	for _, node := range n.Nodes {
 		if net.NodeMap[node] > 0 {
 			continue
 		}
-		subN, isSub := DetectSubsVertical(node, 1.2*len(n.Nodes))
+		subN, isSub := DetectSubsVertical(node, int(maxNratio*float64(len(n.Nodes))))
 		if !isSub {
 			panic("CRUNCHNETWORK: maximum iteration number is not enough to detect the biggest subnetwork")
 		}
@@ -776,7 +814,7 @@ type SimpleWanderer struct {
 }
 
 func NewSimpleWanderer() *SimpleWanderer {
-	return SimpleWanderer{&SLifo{}, make(map[*Node]bool)}
+	return &SimpleWanderer{&SLifo{}, make(map[*Node]bool)}
 }
 
 func (sw *SimpleWanderer) DetectSubs(startNode *Node, maxN int) (map[string]bool, bool) {
@@ -897,7 +935,7 @@ type WandererCom struct {
 }
 
 func NewWandererCom() *WandererCom {
-	return WandererCom{
+	return &WandererCom{
 		make(chan map[*Node]bool),
 		make(chan Order),
 		make(chan *SimpleWanderer),
@@ -906,7 +944,7 @@ func NewWandererCom() *WandererCom {
 
 func (sw *SimpleWanderer) Merge(sw2 *SimpleWanderer) {
 	// Merge the stack
-	for len(sw2.Moignons) > 0 {
+	for len(*sw2.Moignons) > 0 {
 		sw.Moignons.Push(sw2.Moignons.Pop())
 	}
 	//Merge the subnetworks
@@ -916,7 +954,6 @@ func (sw *SimpleWanderer) Merge(sw2 *SimpleWanderer) {
 }
 
 func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com WandererCom) {
-	subN := make(map[*Node]bool) //Incremental subnetwork
 	for {
 		//Wander for stepSize
 		subN, done := sw.Wander(startNode, stepSize)
@@ -925,7 +962,7 @@ func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com Wanderer
 		case Continue: // Go on!
 		case Break: // Stop and pass the subNetwork & the wanderer for merging
 			com.cSubN <- sw.SubNetwork
-			com.cWanderer <- &sw
+			com.cWanderer <- sw
 			return
 		case Merge: //Merge with an other wanderer and go on
 			sw.Merge(<-com.cWanderer)
