@@ -20,7 +20,7 @@ func TestSave(t *testing.T) {
 
 	cs := make(chan Filing)
 	go Parser.Parse(cs, ioutil.Discard)
-	network := NewNetwork("Test", ioutil.Discard, testFolder, "")
+	network := NewNetwork("Test", ioutil.Discard, testFolder)
 
 	i := 0
 	for p := range cs {
@@ -73,7 +73,7 @@ func TestPipeline(t *testing.T) {
 	}
 	cs := make(chan Filing)
 	go Parser.Parse(cs, fi)
-	network := NewNetwork("Test", fi, testFolder, "")
+	network := NewNetwork("Test", fi, testFolder)
 	//Fill the network by adding the filings sent over the channel
 	i := 0
 	for p := range cs {
@@ -101,7 +101,7 @@ func TestPipeline(t *testing.T) {
 	//Loading the network
 	fmt.Println("Loading network")
 	t0 = time.Now()
-	network2 := NewNetwork("Test2", fi, testFolder, "")
+	network2 := NewNetwork("Test2", fi, testFolder)
 	network2.Load()
 	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
 	network2.Summary(os.Stdout)
@@ -132,7 +132,7 @@ func TestLoad(t *testing.T) {
 	fmt.Println("Loading network")
 	t0 := time.Now()
 	fi, _ := os.Create("_test/TestLoad.log")
-	network2 := NewNetwork("Test2", fi, testFolder, "")
+	network2 := NewNetwork("Test", fi, testFolder)
 	network2.Load()
 	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
 	network2.Summary(os.Stdout)
@@ -220,8 +220,8 @@ func TestSubs(t *testing.T) {
 	//Loading the network
 	fmt.Println("Loading network")
 	t0 := time.Now()
-	network := NewNetwork("Test2", nil, testFolder, "Network1.sqlite")
-	network.Load()
+	network := NewNetwork("Test2", nil, testFolder)
+	network.LoadFrom("Network1.sqlite")
 	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
 	network.Summary(os.Stdout)
 	fmt.Println("### ---------------\n")
@@ -275,7 +275,7 @@ func TestCrunching(t *testing.T) {
 	//Loading the network
 	fmt.Println("Loading network")
 	t0 := time.Now()
-	network := NewNetwork("Test2", nil, testFolder, "Network1.sqlite")
+	network := NewNetwork("Test2", nil, testFolder)
 	network.Load()
 	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
 	network.Summary(os.Stdout)

@@ -90,8 +90,8 @@ type Network struct {
 	Nedges int
 	Nodes  map[string]*Node // Less efficient with '*' but necessary because we want to share the pointer with the edges and you cannot create apointer to a map element (that can change location)
 	Nnodes int
-	// EdgeNames []string //AL Needed to iterate over all edges... ?
-	// NodeNames []string //AL Needed to iterate over all nodes... ?
+	// EdgeNames []string //AL Needed to iterate over all edges quickly... ?
+	// NodeNames []string //AL Needed to iterate over all nodes quickly... ?
 	//LinksData []AttrGetter //AL to be fixed / looked into.
 	// Parameters of the Network
 	Symmetrical bool // TODO let it be assymetrical in the nodes and co.
@@ -102,13 +102,11 @@ type Network struct {
 	DBDriver       string
 }
 
-func NewNetwork(name string, logWriter io.Writer, folder, pf string) Network {
+func NewNetwork(name string, logWriter io.Writer, folder string) Network {
 	if logWriter == nil {
 		logWriter = os.Stdout
 	}
-	if pf == "" {
-		pf = "Network0.sqlite"
-	}
+	pf := name + ".sqlite"
 	return Network{
 		name,
 		make(map[string]*Edge),
@@ -429,10 +427,14 @@ func (n *Network) SaveEdges(fp string, ch chan string) {
 	// ch <- "edge"
 }
 
-func (n *Network) Load() {
-	filePath := n.Folder + n.PersistingFile
+func (n *Network) LoadFrom(filePath string) {
 	n.LoadNodes(filePath)
 	n.LoadEdges(filePath)
+}
+
+func (n *Network) Load() {
+	filePath := n.Folder + n.PersistingFile
+	n.LoadFrom(filePath)
 }
 
 func (n *Network) LoadNodes(fp string) {
