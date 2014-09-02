@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -66,7 +67,7 @@ func merge(cs [](chan go_nets.Filing), out chan<- go_nets.Filing) {
 	close(out)
 }
 
-func openFile(name string) os.File {
+func openFile(name string) *os.File {
 	fi, err := os.Create(name)
 	if err != nil {
 		panic(err)
@@ -83,11 +84,11 @@ func openFile(name string) os.File {
 //SECTION 3
 //Subsections
 func Save(network *go_nets.Network) {
-	fmt.Println("Saving network")
+	log.Println("Saving network")
 	t0 := time.Now()
 	network.Save()
-	fmt.Printf("\n Successfully saved the network in %v \n", time.Now().Sub(t0))
-	fmt.Println("### ---------------")
+	log.Printf("\n Successfully saved the network in %v \n", time.Now().Sub(t0))
+	log.Println("### ---------------")
 }
 
 func Parse(fileNames []string, network *go_nets.Network) {
@@ -142,11 +143,11 @@ func Load(n *go_nets.Network, fp string) {
 }
 
 func Crunch(n *go_nets.Network) *go_nets.Net {
-	net := NewNet()
-	t0 = time.Now()
-	net.CrunchNetwork(&network)
+	net := go_nets.NewNet()
+	t0 := time.Now()
+	net.CrunchNetwork(n)
 	d1 := time.Now().Sub(t0)
-	fmt.Println("Crunched the network in", d1, "- Summary:")
+	log.Println("Crunched the network in", d1, "- Summary:")
 	net.Summary(nil)
 	return net
 }
@@ -168,7 +169,7 @@ func main() {
 
 	//Main log setup
 	fiLog := openFile(network.Folder + "parse_total.log")
-	log.SetOutput(io.Multiwriter(os.Stdout, fiLog))
+	log.SetOutput(io.MultiWriter(os.Stdout, fiLog))
 
 	//Feed the network
 	if doParse { //Parse?
@@ -182,13 +183,14 @@ func main() {
 
 	//Analyse
 	net := Crunch(&network)
+	_ = net
 }
 
 ///////////////
 //SECTION 5
 //main debug
 func mainDebug() {
-	fmt.Println("### TESTING the saving option")
+	log.Println("### TESTING the saving option")
 	Parser := go_nets.XmlParser{
 		FileDir:  "./",
 		FileName: "UM20140215_5.xml", //UM20140215_5 UMtest2
@@ -203,16 +205,15 @@ func mainDebug() {
 		// p := <-cs
 		i++
 		fmt.Printf("\r Filing number %d (id = %d)loaded.", i, p.OriginalFileNumber)
-		// fmt.Println("Trying to add it to the network")
+		// log.Println("Trying to add it to the network")
 		network.AddDispatcher(&p)
 	}
 	fmt.Println("")
 	network.Summary(os.Stdout)
 
-	fmt.Println("Saving network")
+	log.Println("Saving network")
 	t0 := time.Now()
 	network.Save()
-	fmt.Printf("\n Successfully saved the network in %v \n", time.Now().Sub(t0))
-	fmt.Println("### ---------------")
-
+	log.Printf("\n Successfully saved the network in %v \n", time.Now().Sub(t0))
+	log.Println("### ---------------")
 }
