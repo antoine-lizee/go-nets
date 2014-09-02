@@ -19,9 +19,6 @@ import (
 var dummy interface{}
 
 func init() {
-	fmt.Println("package 'fmt' is used now - debugging mode")
-	fmt.Printf("package 'log' is used now - debugging mode %s \n", log.Ldate)
-	io.WriteString(os.Stdout, "package 'io' and 'os' are used now - debugging mode \n")
 	//Main Logger Shit
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
