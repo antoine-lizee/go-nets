@@ -103,8 +103,8 @@ func (f *Filing) Dispatch(logger *log.Logger) ([]Noder, []Edger) {
 		d := f.Debtors[i]
 		if nodeIds[d.GetIdentifier()] {
 			// a.Data := a.UpdateData // Not implemented yet. (+ not straightforward implementation since there is no data field yet)
-			f.Debtors = DeleteAgent(f.Debtors, i)
 			logger.Println("DISPATCHER: removing debtor node", d.GetIdentifier(), "because of duplication.")
+			f.Debtors = DeleteAgent(f.Debtors, i)
 		} else {
 			nodeIds[d.GetIdentifier()] = true
 			i++

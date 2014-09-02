@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -65,6 +66,19 @@ func merge(cs [](chan go_nets.Filing), out chan<- go_nets.Filing) {
 	close(out)
 }
 
+func openFile(name string) os.File {
+	fi, err := os.Create(name)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		defer func() {
+			fi.Close()
+		}()
+	}()
+	return fi
+}
+
 ////////////
 //SECTION 3
 //Subsections
@@ -84,16 +98,28 @@ func Parse(fileNames []string, network *go_nets.Network) {
 	for _, fileName := range fileNames {
 		parsers = append(parsers, go_nets.XmlParser{
 			FileDir:  *parsePathArg,
-			FileName: fileName, //"UM20140215_" + strconv.Itoa(i),
+			FileName: fileName, // "UM20140215_" + strconv.Itoa(i),
 		})
+		_ = fileName
 		cs = append(cs, make(chan go_nets.Filing))
 	}
 	//Launch the parsers
 	for i, parser := range parsers {
-		go parser.Parse(cs[i], ioutil.Discard)
+		fi, errOs := os.Create(network.Folder + parser.FileName + ".log")
+		if errOs != nil {
+			panic(errOs) //TODO change it to t.Error
+		}
+		defer func() {
+			if errOs = fi.Close(); errOs != nil {
+				panic(errOs)
+			}
+		}()
+		go parser.Parse(cs[i], fi)
 	}
+
 	//Launch fan in
 	go merge(cs, out)
+	// out = cs[0]
 
 	//Consume the filings as Dispatchers
 	i := 0
@@ -113,13 +139,23 @@ func Load(n *go_nets.Network, fp string) {
 	} else {
 		n.LoadFrom(fp)
 	}
+}
 
+func Crunch(n *go_nets.Network) *go_nets.Net {
+	net := NewNet()
+	t0 = time.Now()
+	net.CrunchNetwork(&network)
+	d1 := time.Now().Sub(t0)
+	fmt.Println("Crunched the network in", d1, "- Summary:")
+	net.Summary(nil)
+	return net
 }
 
 ////////////
 //SECTION 4
 //main
 func main() {
+
 	// Parse the command line arguments
 	flag.Parse()
 	doParse := false
@@ -130,6 +166,10 @@ func main() {
 	//Create Network
 	network := go_nets.NewNetwork("Total1", nil, "Networks/")
 
+	//Main log setup
+	fiLog := openFile(network.Folder + "parse_total.log")
+	log.SetOutput(io.Multiwriter(os.Stdout, fiLog))
+
 	//Feed the network
 	if doParse { //Parse?
 		Parse(parseArgs, &network)
@@ -139,5 +179,40 @@ func main() {
 
 	//Save the network
 	Save(&network)
+
+	//Analyse
+	net := Crunch(&network)
+}
+
+///////////////
+//SECTION 5
+//main debug
+func mainDebug() {
+	fmt.Println("### TESTING the saving option")
+	Parser := go_nets.XmlParser{
+		FileDir:  "./",
+		FileName: "UM20140215_5.xml", //UM20140215_5 UMtest2
+	}
+
+	cs := make(chan go_nets.Filing)
+	go Parser.Parse(cs, ioutil.Discard)
+	network := go_nets.NewNetwork("Test", ioutil.Discard, "Networks/")
+
+	i := 0
+	for p := range cs {
+		// p := <-cs
+		i++
+		fmt.Printf("\r Filing number %d (id = %d)loaded.", i, p.OriginalFileNumber)
+		// fmt.Println("Trying to add it to the network")
+		network.AddDispatcher(&p)
+	}
+	fmt.Println("")
+	network.Summary(os.Stdout)
+
+	fmt.Println("Saving network")
+	t0 := time.Now()
+	network.Save()
+	fmt.Printf("\n Successfully saved the network in %v \n", time.Now().Sub(t0))
+	fmt.Println("### ---------------")
 
 }

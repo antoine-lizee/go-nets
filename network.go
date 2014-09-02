@@ -103,18 +103,21 @@ type Network struct {
 }
 
 func NewNetwork(name string, logWriter io.Writer, folder string) Network {
+	os.Mkdir(folder, os.FileMode(0777))
 	if logWriter == nil {
 		//Preparing files for logging.
-		os.Mkdir(folder, os.FileMode(0777))
 		fi, errOs := os.Create(folder + name + ".log")
 		if errOs != nil {
 			panic(errOs) //TODO change it to t.Error
 		}
 		defer func() {
-			if errOs = fi.Close(); errOs != nil {
-				panic(errOs)
-			}
+			defer func() {
+				if errOs = fi.Close(); errOs != nil {
+					panic(errOs)
+				}
+			}()
 		}()
+		logWriter = fi
 	}
 	pf := name + ".sqlite"
 	return Network{
