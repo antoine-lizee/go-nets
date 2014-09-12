@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"regexp"
 	"sort"
@@ -106,17 +107,22 @@ func NewNetwork(name string, logWriter io.Writer, folder string) Network {
 	os.Mkdir(folder, os.FileMode(0777))
 	if logWriter == nil {
 		//Preparing files for logging.
+		fmt.Println("Opening Log File")
 		fi, errOs := os.Create(folder + name + ".log")
 		if errOs != nil {
 			panic(errOs) //TODO change it to t.Error
 		}
-		defer func() {
-			defer func() {
-				if errOs = fi.Close(); errOs != nil {
-					panic(errOs)
-				}
-			}()
-		}()
+		// defer func() { //TODO manage the log file...
+		// 	defer func() {
+		// 		defer func() {
+		// 			fmt.Println("Closing again")
+		// 		}()
+		// 		fmt.Println("Closing Log File")
+		// 		if errOs = fi.Close(); errOs != nil {
+		// 			panic(errOs)
+		// 		}
+		// 	}()
+		// }()
 		logWriter = fi
 	}
 	pf := name + ".sqlite"
@@ -1041,3 +1047,106 @@ func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com Wanderer
 // 		}
 // 	}
 // }
+
+//---------------------
+//SECTION 5: PAGERANK
+//Page rank is just the asymptotic (stationary) distribution of some random
+//Walker with restart probability - to make it robust even in the case of directed graphs
+//that are potentially non-complete.
+
+//Counter type and functions --
+
+type Counter struct {
+	counts      map[*Node]int
+	totalCounts int
+}
+
+func NewCounter() *Counter {
+	return &Counter{
+		make(map[*Node]int),
+		0,
+	}
+}
+
+func (counter *Counter) Add(n *Node) {
+	counter.counts[n]++
+	counter.totalCounts++
+}
+
+//Let a counter listen to other sub-counters that will feed him
+func (passCounter *Counter) Listen(c <-chan *Counter) {
+	for counter := range c {
+		passCounter.totalCounts = passCounter.totalCounts + counter.totalCounts
+		for k, v := range counter.counts {
+			passCounter.counts[k] = passCounter.counts[k] + v
+		}
+	}
+}
+
+// Random Walker definition and functions --
+
+type RandomWalker struct {
+	restartProb float32
+	state       *Node
+	seeds       []*Node
+}
+
+//Advance the walker to the next node
+func (rw *RandomWalker) Next() *Node {
+	p := rand.Float32()
+	var n *Node
+	var ind int
+	if p >= 1-rw.restartProb { // >= to avoid problems later
+		if l := len(rw.seeds); l == 1 {
+			ind = 0
+		} else {
+			ind = rand.Intn(l)
+		}
+		n = rw.seeds[ind]
+	} else {
+		p = p / (1 - rw.restartProb)
+		i := int(p * float32(len(n.Edges)))
+		n = n.Edges[i].ToNode
+	}
+	rw.state = n
+	return n
+}
+
+//Walk for nStep steps.
+func (rw *RandomWalker) Walk(nStep int, c chan<- *Counter) {
+	counter := NewCounter()
+	for i := 0; i < nStep; i++ {
+		counter.Add(rw.Next())
+	}
+	c <- counter
+}
+
+func (nn *Network) PageRank(nRW, nSteps int, seeds []*Node) *Counter {
+	if seeds == nil {
+		seeds = make([]*Node, len(nn.Nodes))
+		i := 0
+		for _, n := range nn.Nodes {
+			seeds[i] = n
+			i++
+		}
+	}
+	RWs := make([]*RandomWalker, nRW)
+	for i := range RWs {
+		RWs[i] = &RandomWalker{
+			0.2,
+			seeds[rand.Intn(len(seeds))],
+			seeds,
+		}
+	}
+
+	passCounter := NewCounter()
+	cCounter := make(chan *Counter)
+
+	for _, rwi := range RWs {
+		go rwi.Walk(nSteps, cCounter)
+	}
+
+	passCounter.Listen(cCounter)
+
+	return passCounter
+}

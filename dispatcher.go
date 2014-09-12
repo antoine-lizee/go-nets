@@ -118,8 +118,8 @@ func (f *Filing) Dispatch(logger *log.Logger) ([]Noder, []Edger) {
 		s := f.Securers[i]
 		if nodeIds[s.GetIdentifier()] {
 			// a.Data := a.UpdateData // Not implemented yet. (+ not straightforward implementation since there is no data field yet)
-			f.Securers = DeleteAgent(f.Securers, i)
 			logger.Println("DISPATCHER: removing securer node", s.GetIdentifier(), "because of duplication.")
+			f.Securers = DeleteAgent(f.Securers, i)
 		} else {
 			nodeIds[s.GetIdentifier()] = true
 			i++

@@ -2,6 +2,7 @@ package go_nets
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -10,6 +11,23 @@ import (
 )
 
 var testFolder = "_test/"
+
+func initiateMultiCore(nCores int) {
+	fmt.Println("Total Number of cores:", runtime.NumCPU())
+	fmt.Println("Enabling parallelisation with", nCores, "cores")
+	runtime.GOMAXPROCS(nCores)
+}
+
+func loadNetwork(name string, writer io.Writer) *Network {
+	fmt.Println("Loading network")
+	t0 := time.Now()
+	network := NewNetwork(name, writer, testFolder)
+	network.Load()
+	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
+	network.Summary(os.Stdout)
+	fmt.Println("### ---------------\n")
+	return network
+}
 
 func TestSave(t *testing.T) {
 	fmt.Println("### TESTING the saving option")
@@ -42,10 +60,7 @@ func TestSave(t *testing.T) {
 
 func TestPipeline(t *testing.T) {
 	fmt.Println("### TESTING the pipeline")
-	fmt.Println("Total Number of cores:", runtime.NumCPU())
-	nCores := 2
-	fmt.Println("Enabling parallelisation with", nCores, "cores")
-	runtime.GOMAXPROCS(nCores)
+	initiateMultiCore(2)
 
 	//Preparing files for logging.
 	fi, errOs := os.Create("_test/NetworkTest.log")
@@ -127,17 +142,8 @@ func TestPipeline(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-
-	//Loading the network
-	fmt.Println("Loading network")
-	t0 := time.Now()
 	fi, _ := os.Create("_test/TestLoad.log")
-	network2 := NewNetwork("Test", fi, testFolder)
-	network2.Load()
-	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
-	network2.Summary(os.Stdout)
-	fmt.Println("### ---------------\n")
-
+	_ = loadNetwork("Test", fi)
 }
 
 var notString = map[bool]string{
@@ -212,19 +218,10 @@ func (sb SubsResults) Print(debug bool) {
 }
 
 func TestSubs(t *testing.T) {
-	fmt.Println("Total Number of cores:", runtime.NumCPU())
-	nCores := 4
-	fmt.Println("Enabling parallelisation with", nCores, "cores")
-	runtime.GOMAXPROCS(nCores)
+	initiateMultiCore(4)
 
 	//Loading the network
-	fmt.Println("Loading network")
-	t0 := time.Now()
-	network := NewNetwork("Test2", nil, testFolder)
-	network.LoadFrom("Network1.sqlite")
-	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
-	network.Summary(os.Stdout)
-	fmt.Println("### ---------------\n")
+	network := loadNetwork("Test2", nil)
 
 	//Searching for some nodes, and executing the subnetwork research from this node.
 	sNodes := network.SearchNodes("wellsfargobank") //wells wellsfargobanna$
@@ -267,18 +264,10 @@ func TestSubs(t *testing.T) {
 }
 
 func TestCrunching(t *testing.T) {
-	fmt.Println("Total Number of cores:", runtime.NumCPU())
-	nCores := 4
-	fmt.Println("Enabling parallelisation with", nCores, "cores")
-	runtime.GOMAXPROCS(nCores)
+	initiateMultiCore(4)
 
 	//Loading the network
-	fmt.Println("Loading network")
-	t0 := time.Now()
-	network := NewNetwork("Test2", nil, testFolder)
-	network.Load()
-	fmt.Printf("\n Successfully loaded the network in %v \n", time.Now().Sub(t0))
-	network.Summary(os.Stdout)
+	loadNetwork("Test2", nil)
 
 	//Crunch the network:
 	net := NewNet()
@@ -287,4 +276,11 @@ func TestCrunching(t *testing.T) {
 	d1 := time.Now().Sub(t0)
 	fmt.Println("Crunched the network in", d1, "- Summary:")
 	net.Summary(nil)
+}
+
+func TestPageRank(t *testing.T) {
+	initiateMultiCore(4)
+
+	//Loading the network
+
 }

@@ -33,13 +33,14 @@ func (fn *FileNames) Set(value string) error {
 
 var (
 	loadArg      = flag.String("loadFile", "", "Provide the name of the file to load the network from")
-	parsePathArg = flag.String("parsePath", "/media/FD/MISSIONS/ALEX/UM20140215_X/", "Provide the name of the parsed file")
+	parsePathArg = flag.String("parsePath", "./", "Provide the path of the parsed file") //"/media/FD/MISSIONS/ALEX/UM20140215_X/"
+	savePathArg  = flag.String("savePath", "./", "Provide the path of the output files")
 	parseArgs    = FileNames{}
-	nameArg      = flag.String("name", "Total1", "Provide the name of the network")
+	nameArg      = flag.String("name", "Total0", "Provide the name of the network")
 )
 
 func init() {
-	flag.Var(&parseArgs, "parse", "Specify a comma separated list of file names")
+	flag.Var(&parseArgs, "parse", "Specify a comma separated list of file names for parsing")
 }
 
 ////////////
@@ -165,7 +166,7 @@ func main() {
 	}
 
 	//Create Network
-	network := go_nets.NewNetwork("Total1", nil, "Networks/")
+	network := go_nets.NewNetwork(*nameArg, nil, *savePathArg)
 
 	//Main log setup
 	fiLog := openFile(network.Folder + "parse_total.log")
