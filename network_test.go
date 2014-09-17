@@ -282,5 +282,33 @@ func TestPageRank(t *testing.T) {
 	initiateMultiCore(4)
 
 	//Loading the network
+	network := loadNetwork("Test", nil)
+
+	//Running pagerank in two different ways
+	fmt.Println("Method 1 - Random Walks")
+	t0 := time.Now()
+	pi := network.PageRankRW(4, 1000, nil)
+	t1 := time.Now().Sub(t0)
+	fmt.Println("Summary:")
+	maxElts := 1 << 16
+	elts := make([]struct {
+		k string
+		v float32
+	}, maxElts+1)
+	for k, v := range pi {
+		if v > elts[maxElts].v {
+			i1 := 0
+			i2 := maxElts
+			for i2 > i1+1 {
+				iMid := i1 + (i2-i1)/2
+				if v > elts[iMid].v {
+					i1 = iMid
+				} else {
+					i2 = iMid
+				}
+			}
+		}
+	}
+	fmt.Println("Done in", t1)
 
 }

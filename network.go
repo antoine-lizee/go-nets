@@ -1050,9 +1050,14 @@ func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com Wanderer
 
 //---------------------
 //SECTION 5: PAGERANK
-//Page rank is just the asymptotic (stationary) distribution of some random
-//Walker with restart probability - to make it robust even in the case of directed graphs
-//that are potentially non-complete.
+//We call PAge rank the algorithm whose goal is to find the asymptotic stationary
+//distribution of the markov chain described by the states of the graph.
+//Several choices arise depending of the nature of the graph.
+//If the graph is symmetric, there is a simple formulation based on the
+//degree of the node (or the summed "conductance" if edges are weighted)
+//If the graph is asymmetric and no "too big", one can use a matrix implementation
+//of the PageRank, even without restarting the matrix power step if one is confindent
+//about aperiodicity
 
 //Counter type and functions --
 
@@ -1071,6 +1076,16 @@ func NewCounter() *Counter {
 func (counter *Counter) Add(n *Node) {
 	counter.counts[n]++
 	counter.totalCounts++
+}
+
+//Normalize the counter and give the map output
+func (counter *Counter) Normalize() map[*Node]float32 {
+	N := float32(counter.totalCounts)
+	pi := map[*Node]float32{}
+	for k, v := range counter.counts {
+		pi[k] = float32(v) / N
+	}
+	return pi
 }
 
 //Let a counter listen to other sub-counters that will feed him
@@ -1121,7 +1136,10 @@ func (rw *RandomWalker) Walk(nStep int, c chan<- *Counter) {
 	c <- counter
 }
 
-func (nn *Network) PageRank(nRW, nSteps int, seeds []*Node) *Counter {
+//Pagerank function defined on random walkers (Larrry Page way)
+//Applicable in case of large networks if non regular
+//OR for personalization (seeds as a subset)
+func (nn *Network) PageRankRW(nRW, nSteps int, seeds []*Node) map[*Node]float32 {
 	if seeds == nil {
 		seeds = make([]*Node, len(nn.Nodes))
 		i := 0
@@ -1148,5 +1166,50 @@ func (nn *Network) PageRank(nRW, nSteps int, seeds []*Node) *Counter {
 
 	passCounter.Listen(cCounter)
 
-	return passCounter
+	return passCounter.Normalize()
 }
+
+//Simple PageRank implementation based on node degree information.
+//Applicable only for regular symetric networks. No Edge strengh is
+//checked. (mainly because the lack of implementation so far)
+func (n *Network) PageRankSymmetricRegular() map[*Node]float32 {
+	counter := NewCounter()
+	for _, node := range n.Nodes {
+		deg := len(node.Edges)
+		counter.counts[node] = deg
+		counter.totalCounts = counter.totalCounts + deg
+	}
+	return counter.Normalize()
+}
+
+//Simple PageRank implementation based on node degree information.
+//Applicable only for symetric networks.
+//Everything compiles but the missing property Edge.Weight
+func (n *Network) PageRankSymmetric() map[*Node]float32 {
+	//Create a float counter
+	counter := struct {
+		weight      map[*Node]float32
+		totalWeight float64
+	}{
+		make(map[*Node]float32),
+		0,
+	}
+	//Iterate over the nodes of the network
+	for _, node := range n.Nodes {
+		deg := float32(0)
+		for _, e := range node.Edges {
+			w := float32(e.Kind) //TODO: -> e.Weight
+			deg = deg + w
+		}
+		counter.weight[node] = deg
+		counter.totalWeight = counter.totalWeight + float64(deg)
+	}
+	//Normalize
+	for k, v := range counter.weight {
+		counter.weight[k] = v / float32(counter.totalWeight)
+	}
+	return counter.weight
+}
+
+//Matrix implementation of the PageRank Algorithm. Very useful when
+//the graph is directed and small enough to be computed that way.
