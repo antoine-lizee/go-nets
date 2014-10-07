@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"runtime"
 	"testing"
@@ -18,7 +19,7 @@ func initiateMultiCore(nCores int) {
 	runtime.GOMAXPROCS(nCores)
 }
 
-func loadNetwork(name string, writer io.Writer) *Network {
+func loadNetwork(name string, writer io.Writer) Network {
 	fmt.Println("Loading network")
 	t0 := time.Now()
 	network := NewNetwork(name, writer, testFolder)
@@ -33,12 +34,12 @@ func TestSave(t *testing.T) {
 	fmt.Println("### TESTING the saving option")
 	Parser := XmlParser{
 		FileDir:  testFolder,
-		FileName: "UMtest2.xml", //UM20140215_5 UMtest2
+		FileName: "UMtest.xml", //UM20140215_5 UMtest2
 	}
 
 	cs := make(chan Filing)
 	go Parser.Parse(cs, ioutil.Discard)
-	network := NewNetwork("Test", ioutil.Discard, testFolder)
+	network := NewNetwork("TestSmall", ioutil.Discard, testFolder)
 
 	i := 0
 	for p := range cs {
@@ -122,7 +123,7 @@ func TestPipeline(t *testing.T) {
 	network2.Summary(os.Stdout)
 	fmt.Println("### ---------------\n")
 
-	//Comparing the networks the network
+	//Comparing the networks
 	fmt.Println("Comparing networks")
 	t0 = time.Now()
 	network.Compare(network2)
@@ -180,7 +181,7 @@ func (sb SubsResults) testSub(sNode *Node, network *Network) SubsResults {
 	sb.t2 = time.Now().Sub(t0)
 	sb.isSub, sb.isSub2 = isSub, isSub2
 	sb.sizeSub = len(subN)
-	// //DEBUG Show the subNEtwork ?
+	// //DEBUG Show the subNetwork ?
 	// for nName, _ := range subN {
 	// 	fmt.Printf("%p ", network.Nodes[nName])
 	// }
@@ -221,7 +222,7 @@ func TestSubs(t *testing.T) {
 	initiateMultiCore(4)
 
 	//Loading the network
-	network := loadNetwork("Test2", nil)
+	network := loadNetwork("TestSmall", nil)
 
 	//Searching for some nodes, and executing the subnetwork research from this node.
 	sNodes := network.SearchNodes("wellsfargobank") //wells wellsfargobanna$
@@ -267,48 +268,91 @@ func TestCrunching(t *testing.T) {
 	initiateMultiCore(4)
 
 	//Loading the network
-	loadNetwork("Test2", nil)
+	network := loadNetwork("TestSmall", nil)
 
 	//Crunch the network:
 	net := NewNet()
-	t0 = time.Now()
+	t0 := time.Now()
 	net.CrunchNetwork(&network)
 	d1 := time.Now().Sub(t0)
 	fmt.Println("Crunched the network in", d1, "- Summary:")
 	net.Summary(nil)
 }
 
+type myMap map[*Node]float32
+
+type myStore struct {
+	k string
+	v float32
+}
+
+func (pi myMap) summary(nTop int) {
+	maxInd := 1 << uint(math.Floor(math.Log2(float64(nTop))))
+	elts := make([]myStore, maxInd+1)
+	for k, v := range pi {
+		if v > elts[maxInd].v {
+			if v > elts[0].v {
+				elts = append([]myStore{myStore{
+					k.Name,
+					v,
+				}}, elts[0:len(elts)-1]...)
+				// fmt.Printf("111 - %# v \n", pretty.Formatter(elts)) // DEBUG
+			} else {
+				i1 := 0
+				i2 := maxInd
+				for i2 > i1+1 {
+					iMid := i1 + (i2-i1)/2
+					if v < elts[iMid].v {
+						i1 = iMid
+					} else {
+						i2 = iMid
+					}
+				}
+				elts = append(elts[0:i2],
+					append([]myStore{myStore{
+						k.Name,
+						v,
+					}},
+						elts[i2:len(elts)-1]...)...)
+				// fmt.Printf("222 %d - \n %# v \n", i2, pretty.Formatter(elts)) //DEBUG
+			}
+		}
+	}
+	for i, e := range elts {
+		fmt.Printf("%3d  -  %20.20s : %.3e \n", i, e.k, e.v)
+	}
+
+}
+
 func TestPageRank(t *testing.T) {
-	initiateMultiCore(4)
+	// initiateMultiCore(4)
 
 	//Loading the network
-	network := loadNetwork("Test", nil)
+	network := loadNetwork("TestSmall", nil)
 
 	//Running pagerank in two different ways
 	fmt.Println("Method 1 - Random Walks")
 	t0 := time.Now()
-	pi := network.PageRankRW(4, 1000, nil)
+	pi := network.PageRankRW(1, 1e5, nil)
 	t1 := time.Now().Sub(t0)
 	fmt.Println("Summary:")
-	maxElts := 1 << 16
-	elts := make([]struct {
-		k string
-		v float32
-	}, maxElts+1)
-	for k, v := range pi {
-		if v > elts[maxElts].v {
-			i1 := 0
-			i2 := maxElts
-			for i2 > i1+1 {
-				iMid := i1 + (i2-i1)/2
-				if v > elts[iMid].v {
-					i1 = iMid
-				} else {
-					i2 = iMid
-				}
-			}
-		}
-	}
+	myMap(pi).summary(10)
+	fmt.Println("Done in", t1)
+
+	fmt.Println("Method 2 s- determinist")
+	t0 = time.Now()
+	pi = network.PageRankSymmetricRegular()
+	t1 = time.Now().Sub(t0)
+	fmt.Println("Summary:")
+	myMap(pi).summary(10)
+	fmt.Println("Done in", t1)
+
+	fmt.Println("Method 3 - Matrix")
+	t0 = time.Now()
+	pi = network.PageRankMatrix()
+	t1 = time.Now().Sub(t0)
+	fmt.Println("Summary:")
+	myMap(pi).summary(10)
 	fmt.Println("Done in", t1)
 
 }

@@ -12,8 +12,14 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/gonum/blas/cblas"
+	"github.com/gonum/matrix/mat64"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+func init() {
+	mat64.Register(cblas.Blas{})
+}
 
 //--------------
 //SECTION 0: DEFINITION OF THE NETOWRK
@@ -1051,13 +1057,16 @@ func (sw *SimpleWanderer) WanderStep(startNode *Node, stepSize int, com Wanderer
 //---------------------
 //SECTION 5: PAGERANK
 //We call PAge rank the algorithm whose goal is to find the asymptotic stationary
-//distribution of the markov chain described by the states of the graph.
+//distribution of the markov chain described by the vertices (=states) of the graph.
 //Several choices arise depending of the nature of the graph.
 //If the graph is symmetric, there is a simple formulation based on the
 //degree of the node (or the summed "conductance" if edges are weighted)
-//If the graph is asymmetric and no "too big", one can use a matrix implementation
+//If the graph is directed, there is noand no "too big", one can use a matrix implementation
 //of the PageRank, even without restarting the matrix power step if one is confindent
-//about aperiodicity
+//about aperiodicity.
+//When the graph is too big and with an unknown directed structure, we implemented
+//the "random surfer" pagerank algorithm (cf Google...) that implements discovery of the network
+//by random walker.
 
 //Counter type and functions --
 
@@ -1089,11 +1098,20 @@ func (counter *Counter) Normalize() map[*Node]float32 {
 }
 
 //Let a counter listen to other sub-counters that will feed him
-func (passCounter *Counter) Listen(c <-chan *Counter) {
-	for counter := range c {
-		passCounter.totalCounts = passCounter.totalCounts + counter.totalCounts
-		for k, v := range counter.counts {
-			passCounter.counts[k] = passCounter.counts[k] + v
+func (passCounter *Counter) Listen(c <-chan *Counter, done <-chan int, nRW int) {
+	for {
+		select {
+		case counter := <-c:
+			passCounter.totalCounts = passCounter.totalCounts + counter.totalCounts
+			for k, v := range counter.counts {
+				passCounter.counts[k] = passCounter.counts[k] + v
+			}
+		case <-done:
+			nRW--
+			if nRW == 0 {
+				fmt.Println(nRW, "walkers left")
+				return
+			}
 		}
 	}
 }
@@ -1111,35 +1129,46 @@ func (rw *RandomWalker) Next() *Node {
 	p := rand.Float32()
 	var n *Node
 	var ind int
-	if p >= 1-rw.restartProb { // >= to avoid problems later
-		if l := len(rw.seeds); l == 1 {
+	l := len(rw.state.Edges)
+	if (p >= 1-rw.restartProb) || (l == 0) { // >= to avoid problems later
+		if ls := len(rw.seeds); ls == 1 {
 			ind = 0
 		} else {
-			ind = rand.Intn(l)
+			ind = rand.Intn(ls)
 		}
 		n = rw.seeds[ind]
+		// fmt.Printf("Restarting from Node %20.20s to node %20.20s. \n", rw.state.Name, n.Name)
 	} else {
-		p = p / (1 - rw.restartProb)
-		i := int(p * float32(len(n.Edges)))
-		n = n.Edges[i].ToNode
+		p = p / (1.0 - rw.restartProb)
+		i := int(math.Floor(float64(p) * float64(l)))
+		// fmt.Printf("Edge number %4d / %4d (p=%.2f) of Node %20.20s. \n", i, len(rw.state.Edges), p, rw.state.Name)
+		n = rw.state.Edges[i].ToNode
 	}
 	rw.state = n
 	return n
 }
 
 //Walk for nStep steps.
-func (rw *RandomWalker) Walk(nStep int, c chan<- *Counter) {
-	counter := NewCounter()
-	for i := 0; i < nStep; i++ {
-		counter.Add(rw.Next())
+func (rw *RandomWalker) Walk(nStep int, c chan<- *Counter, done chan<- int) {
+	i := 0
+	for i < nStep {
+		counter := NewCounter()
+		for j := 0; j < 1000; j++ {
+			counter.Add(rw.Next())
+			i++
+			// fmt.Printf("\r Step: %d", i) //DEBUG
+		}
+		c <- counter
 	}
-	c <- counter
+	// fmt.Println("\nDone.") //DEBUG
+	done <- 1
 }
 
-//Pagerank function defined on random walkers (Larrry Page way)
+//Pagerank function defined on random walkers (Larry Page way)
 //Applicable in case of large networks if non regular
 //OR for personalization (seeds as a subset)
 func (nn *Network) PageRankRW(nRW, nSteps int, seeds []*Node) map[*Node]float32 {
+	//Unpack arguments and prepare seeds
 	if seeds == nil {
 		seeds = make([]*Node, len(nn.Nodes))
 		i := 0
@@ -1148,23 +1177,28 @@ func (nn *Network) PageRankRW(nRW, nSteps int, seeds []*Node) map[*Node]float32 
 			i++
 		}
 	}
+	//Initiation of the random walkers
 	RWs := make([]*RandomWalker, nRW)
 	for i := range RWs {
 		RWs[i] = &RandomWalker{
-			0.2,
+			0.15,
 			seeds[rand.Intn(len(seeds))],
 			seeds,
 		}
 	}
 
+	//Initiation of a global counter
 	passCounter := NewCounter()
 	cCounter := make(chan *Counter)
+	done := make(chan int)
 
+	//Launch the walk of the random walkers
 	for _, rwi := range RWs {
-		go rwi.Walk(nSteps, cCounter)
+		go rwi.Walk(nSteps, cCounter, done)
 	}
 
-	passCounter.Listen(cCounter)
+	//Collect data
+	passCounter.Listen(cCounter, done, nRW)
 
 	return passCounter.Normalize()
 }
@@ -1213,3 +1247,66 @@ func (n *Network) PageRankSymmetric() map[*Node]float32 {
 
 //Matrix implementation of the PageRank Algorithm. Very useful when
 //the graph is directed and small enough to be computed that way.
+
+//Look up table type for network nodes
+type Nlut struct {
+	ilut map[*Node]int
+	nlut []*Node
+}
+
+//GetLUT() create a two ways look-up table for indexing the graph
+func (nn *Network) GetLUT() Nlut {
+	LUT := Nlut{
+		map[*Node]int{},
+		make([]*Node, len(nn.Nodes)),
+	}
+
+	i := 0
+	for _, n := range nn.Nodes {
+		LUT.ilut[n] = i
+		LUT.nlut[i] = n
+		i++
+	}
+	return LUT
+}
+
+//GetAMatrix returns the adjacency matrix of the network.
+func (nn *Network) GetAMatrix() (*mat64.Dense, Nlut) {
+	nNodes := len(nn.Nodes)
+	A := mat64.NewDense(nNodes, nNodes, nil)
+	LUT := nn.GetLUT()
+	for i, n := range LUT.nlut {
+		for _, e := range n.Edges {
+			A.Set(i, LUT.ilut[e.ToNode], 1)
+		}
+	}
+	return A, LUT
+}
+
+//PageRankMatrix uses matrix computation to efficiently compute the pi ditribution.
+//Can be used only for small networks.
+func (nn *Network) PageRankMatrix() map[*Node]float32 {
+	A, LUT := nn.GetAMatrix()
+	r, c := A.Dims()
+	// Aj := mat64.NewDense(r, c, nil)
+	Ai := mat64.NewDense(r, c, nil)
+	diff := 1.0
+	i := 0
+	for i < 10 { // diff > 1e-3
+		i++
+		Ai.Mul(A, A)
+		A.Sub(Ai, A)
+		diff = A.Norm(0)
+		// if i%10 == 0 {
+		fmt.Printf("Iteration %3d with diff = %.2g \n", i, diff)
+		// }
+		A = Ai
+		fmt.Println(A)
+	}
+	vec := A.Col(nil, 0)
+	res := map[*Node]float32{}
+	for i, n := range LUT.nlut {
+		res[n] = float32(vec[i])
+	}
+	return res
+}
