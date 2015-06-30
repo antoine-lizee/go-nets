@@ -10,16 +10,18 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"sync"
 
-	"github.com/gonum/blas/cblas"
+	"github.com/gonum/floats"
 	"github.com/gonum/matrix/mat64"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func init() {
-	mat64.Register(cblas.Blas{})
-}
+// NOT NEEDED ANYMORE
+// func init() {
+// 	mat64.Register(blas64.Blas{})
+// }
 
 //--------------
 //SECTION 0: DEFINITION OF THE NETOWRK
@@ -1270,11 +1272,35 @@ func (nn *Network) GetLUT() Nlut {
 	return LUT
 }
 
+func (nn *Network) GetSortedLUT() Nlut {
+	LUT := Nlut{
+		map[*Node]int{},
+		make([]*Node, len(nn.Nodes)),
+	}
+	intermSlice := make([]string, len(nn.Nodes))
+	intermMap := map[string]*Node{}
+	i := 0
+	for _, n := range nn.Nodes {
+		intermSlice[i] = n.Name
+		intermMap[n.Name] = n
+		i++
+	}
+	sort.Strings(intermSlice)
+	i = 0
+	for _, name := range intermSlice {
+		n := intermMap[name]
+		LUT.ilut[n] = i
+		LUT.nlut[i] = n
+		i++
+	}
+	return LUT
+}
+
 //GetAMatrix returns the adjacency matrix of the network.
 func (nn *Network) GetAMatrix() (*mat64.Dense, Nlut) {
 	nNodes := len(nn.Nodes)
 	A := mat64.NewDense(nNodes, nNodes, nil)
-	LUT := nn.GetLUT()
+	LUT := nn.GetSortedLUT()
 	for i, n := range LUT.nlut {
 		for _, e := range n.Edges {
 			A.Set(i, LUT.ilut[e.ToNode], 1)
@@ -1283,27 +1309,41 @@ func (nn *Network) GetAMatrix() (*mat64.Dense, Nlut) {
 	return A, LUT
 }
 
+func (nn *Network) GetDMatrix() (*mat64.Dense, Nlut) {
+	D, LUT := nn.GetAMatrix()
+	nr, _ := D.Dims()
+	for r := 0; r < nr; r++ {
+		row := D.Row(nil, r)
+		floats.Scale(1.0/floats.Sum(row), row)
+		D.SetRow(r, row)
+	}
+	return D, LUT
+}
+
 //PageRankMatrix uses matrix computation to efficiently compute the pi ditribution.
 //Can be used only for small networks.
 func (nn *Network) PageRankMatrix() map[*Node]float32 {
-	A, LUT := nn.GetAMatrix()
-	r, c := A.Dims()
+	D, LUT := nn.GetDMatrix()
+	r, c := D.Dims()
 	// Aj := mat64.NewDense(r, c, nil)
-	Ai := mat64.NewDense(r, c, nil)
+	Di := mat64.NewDense(r, c, nil)
+	// D0 := mat64.NewDense(r, c, nil)
+	// D0.Clone(D)
 	diff := 1.0
 	i := 0
-	for i < 10 { // diff > 1e-3
+	for diff > 1e-8 { // diff > 1e-3
+		DumpMat64Mat(D, "_test/"+strconv.Itoa(i))
 		i++
-		Ai.Mul(A, A)
-		A.Sub(Ai, A)
-		diff = A.Norm(0)
+		Di.Mul(D, D)
+		D.Sub(Di, D)
+		diff = D.Max() //D.Norm(1)
 		// if i%10 == 0 {
 		fmt.Printf("Iteration %3d with diff = %.2g \n", i, diff)
 		// }
-		A = Ai
-		fmt.Println(A)
+		D.Clone(Di)
+		// fmt.Println(floats.Max(D - D.))
 	}
-	vec := A.Col(nil, 0)
+	vec := D.Col(nil, 0)
 	res := map[*Node]float32{}
 	for i, n := range LUT.nlut {
 		res[n] = float32(vec[i])

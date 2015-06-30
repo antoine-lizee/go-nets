@@ -1,14 +1,22 @@
 package go_nets
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/base64"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"io/ioutil"
 	"math"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gonum/matrix/mat64"
 )
 
 var testFolder = "_test/"
@@ -322,6 +330,86 @@ func (pi myMap) summary(nTop int) {
 		fmt.Printf("%3d  -  %20.20s : %.3e \n", i, e.k, e.v)
 	}
 
+}
+
+func ShowMat64Mat(M *mat64.Dense) {
+	showImage(createImageFromMat(M))
+}
+
+func DumpMat64Mat(M *mat64.Dense, fileName string) {
+	dumpImage(createImageFromMat(M), fileName+".png")
+	dumpVec(M.RawMatrix().Data, fileName+".txt")
+}
+
+func createImageFromMat(M *mat64.Dense) image.Image {
+	dx, dy := M.Dims()
+	m := image.NewGray(image.Rect(0, 0, dx, dy))
+	for y := 0; y < dy; y++ {
+		for x := 0; x < dx; x++ {
+			// v := data[y][x]
+			i := y*m.Stride + x
+			m.Pix[i] = uint8(M.At(x, y) * 255 * 2)
+		}
+	}
+	return m
+}
+
+func showImage(m image.Image) {
+	var buf bytes.Buffer
+	err := png.Encode(&buf, m)
+	if err != nil {
+		panic(err)
+	}
+	enc := base64.StdEncoding.EncodeToString(buf.Bytes())
+	fmt.Println("IMAGE:" + enc)
+}
+
+func dumpImage(m image.Image, fileName string) {
+	fi, _ := os.Create(fileName)
+	defer fi.Close()
+	err := png.Encode(fi, m)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func dumpVec(data []float64, fileName string) {
+	fi, _ := os.Create(fileName)
+	defer fi.Close()
+	buf := bufio.NewWriter(fi)
+	// for _, f := range data {
+	// 		fmt.Fprintf(buf, "%.8f", f)
+	// }
+	fmt.Fprintln(buf, strings.Trim(fmt.Sprintf("%.8f ", data), "[ ]"))
+}
+
+func isMat64Symmetric(M *mat64.Dense) bool {
+	r, c := M.Dims()
+	if r != c {
+		return false
+	}
+	for i := 0; i < r; i++ {
+		for j := 0; j < i; j++ {
+			if M.At(i, j) != M.At(j, i) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func TestAMatrix(t *testing.T) {
+	// Loading the network
+	network := loadNetwork("TestSmall", nil)
+	//Get the A Matrix and it's transposed version
+	A, _ := network.GetAMatrix()
+	fmt.Println("Symmetric ?", isMat64Symmetric(A))
+	//Test for equality
+	ShowMat64Mat(A)
+	A.Mul(A, A)
+	ShowMat64Mat(A)
+	A.Mul(A, A)
+	ShowMat64Mat(A)
 }
 
 func TestPageRank(t *testing.T) {

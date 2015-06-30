@@ -149,11 +149,11 @@ func (p *XmlParser) Parse(c chan Filing, logDst io.Writer) {
 		switch se := t.(type) {
 		case xml.StartElement:
 			// If we just read a StartElement token
-			// ...and its name is "page"
+			// ...and its name is "FileDetail"
 			if se.Name.Local == "FileDetail" {
 				var p Filing
 				// decode a whole chunk of following XML into the
-				// variable p which is a Filing (se above)
+				// variable p which is a Filing (see above)
 				decoder.DecodeElement(&p, &se)
 				p.clean()
 				// Check and Send the element

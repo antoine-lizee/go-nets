@@ -18,7 +18,7 @@ func (i *IndividualName) String() string {
 	return i.FirstName + "." + i.LastName
 }
 
-// Define the agent as an Noder
+// Define the agent as a Noder
 func (a *Agent) GetIdentifier() string {
 	if a.GetKind() == Emitter {
 		return Atomize(a.OrganizationName)
@@ -33,7 +33,6 @@ func (a *Agent) GetKind() NodeKind {
 	} else {
 		return Receiver
 	}
-
 }
 
 func (a *Agent) GetData() AttrGetter {
