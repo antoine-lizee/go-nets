@@ -7,6 +7,8 @@ import (
 	"os"
 	"testing"
 
+	"code.google.com/p/go.text/encoding/charmap"
+
 	"github.com/kr/pretty"
 )
 
@@ -51,6 +53,7 @@ func TestDispatcher(t *testing.T) {
 	Parser := XmlParser{
 		FileDir:  "_test/", ///media/FD/MISSIONS/ALEX/UM20140215_X/",
 		FileName: "UMtest.xml",
+		Encoding: charmap.Windows1252,
 	}
 	cs := make(chan Filing)
 	go Parser.Parse(cs, nil)

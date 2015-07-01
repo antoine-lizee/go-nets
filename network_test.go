@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"code.google.com/p/go.text/encoding/charmap"
+
 	"github.com/gonum/matrix/mat64"
 )
 
@@ -43,6 +45,7 @@ func TestSave(t *testing.T) {
 	Parser := XmlParser{
 		FileDir:  testFolder,
 		FileName: "UMtest.xml", //UM20140215_5 UMtest2
+		Encoding: charmap.Windows1252,
 	}
 
 	cs := make(chan Filing)
@@ -94,6 +97,7 @@ func TestPipeline(t *testing.T) {
 	Parser := XmlParser{
 		FileDir:  testFolder,    ///media/FD/MISSIONS/ALEX/UM20140215_X/",
 		FileName: "UMtest2.xml", //"UMtest2.xml" UM20140215_5
+		Encoding: charmap.Windows1252,
 	}
 	cs := make(chan Filing)
 	go Parser.Parse(cs, fi)

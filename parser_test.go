@@ -2,7 +2,10 @@ package go_nets
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
+
+	"code.google.com/p/go.text/encoding/charmap"
 
 	"github.com/kr/pretty"
 )
@@ -12,9 +15,10 @@ func TestParser(t *testing.T) {
 	Parser := XmlParser{
 		FileDir:  "_test/",
 		FileName: "UMtest2.xml",
+		Encoding: charmap.Windows1252, // Comment that line to see it fail, and parse a small subset.
 	}
 	cs := make(chan Filing)
-	go Parser.Parse(cs, nil)
+	go Parser.Parse(cs, ioutil.Discard) // Put nil instead of Discard to get the default stdout logging behaviour
 	i := 0
 	for p := range cs {
 		// p := <-cs
@@ -29,6 +33,7 @@ func TestParserVerbose(t *testing.T) {
 	Parser := XmlParser{
 		FileDir:  "_test/", //media/FD/MISSIONS/ALEX/UM20140215_X/",
 		FileName: "UMtest.xml",
+		Encoding: charmap.Windows1252,
 	}
 	cs := make(chan Filing)
 	go Parser.ParseVerbose(cs, nil)

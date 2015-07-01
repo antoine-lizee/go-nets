@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"code.google.com/p/go.text/encoding/charmap"
+
 	"github.com/antoine-lizee/go-nets"
 )
 
@@ -101,6 +103,7 @@ func Parse(fileNames []string, network *go_nets.Network) {
 		parsers = append(parsers, go_nets.XmlParser{
 			FileDir:  *parsePathArg,
 			FileName: fileName, // "UM20140215_" + strconv.Itoa(i),
+			Encoding: charmap.Windows1252,
 		})
 		_ = fileName
 		cs = append(cs, make(chan go_nets.Filing))
@@ -195,6 +198,7 @@ func mainDebug() {
 	Parser := go_nets.XmlParser{
 		FileDir:  "./",
 		FileName: "UM20140215_5.xml", //UM20140215_5 UMtest2
+		Encoding: charmap.Windows1252,
 	}
 
 	cs := make(chan go_nets.Filing)

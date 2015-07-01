@@ -12,7 +12,6 @@ import (
 	"github.com/kr/pretty"
 
 	"code.google.com/p/go.text/encoding"
-	"code.google.com/p/go.text/encoding/charmap"
 	"code.google.com/p/go.text/transform"
 )
 
@@ -133,16 +132,24 @@ func (p *XmlParser) Parse(c chan Filing, logDst io.Writer) {
 		}
 	}()
 	// Transform the encoding of the reading pipe
-	fiUTF8 := transform.NewReader(fi, charmap.Windows1252.NewDecoder())
+	var fiUTF8 = io.Reader(fi)
+	if enc := p.Encoding; enc != nil {
+		fiUTF8 = transform.NewReader(fi, enc.NewDecoder())
+	} else {
+		fiUTF8 = fi
+	}
 	// Parse the xml
 	decoder := xml.NewDecoder(fiUTF8)
 	i := 0
 	t0 := time.Now()
 	for {
 		// Read tokens from the XML document in a stream.
-		t, _ := decoder.Token()
+		t, err := decoder.Token()
 		if t == nil {
 			close(c)
+			if err != io.EOF {
+				log.Fatal(err)
+			}
 			break
 		}
 		// Inspect the type of the token just read.
@@ -204,7 +211,12 @@ func (p *XmlParser) ParseVerbose(c chan Filing, logDst io.Writer) { // Only for 
 		}
 	}()
 	// Transform the encoding of the reading pipe
-	fiUTF8 := transform.NewReader(fi, charmap.Windows1252.NewDecoder())
+	var fiUTF8 = io.Reader(fi)
+	if enc := p.Encoding; enc != nil {
+		fiUTF8 = transform.NewReader(fi, enc.NewDecoder())
+	} else {
+		fiUTF8 = fi
+	}
 	// Parse the xml
 	// buffer := bytes.NewBuffer([]byte{})
 	// finalReader := io.TeeReader(fiUTF8, buffer)
