@@ -15,7 +15,7 @@ import (
 
 type Saver interface {
 	SaveBatch([]Saveable) // TODO add error handling
-	InitPersistance(chan string, Saveable)
+	InitPersistance(Saveable) chan string
 }
 
 type Saveable interface {
@@ -24,21 +24,21 @@ type Saveable interface {
 }
 
 func ListenAndSave(c <-chan Saveable, s Saver) {
-	statusCh := make(chan string)
 	// Initialize the saving process
 	first := <-c
-	s.InitPersistance(statusCh, first)
+	statusCh := s.InitPersistance(first)
 	batchSize := 1000
 	// Initialize
 	batch := make([]Saveable, batchSize)
 	i := 0
-	for f := range c {
+	for saveable := range c {
 		if i == batchSize {
-			fmt.Println("Saving first batch...")
+			log.Println("Saving first batch...")
 			s.SaveBatch(batch)
 			i = 0
 		}
-		batch[i] = f
+		log.Printf("\r Filing number %d received, with id %d.", i, saveable.(*Filing).OriginalFileNumber)
+		batch[i] = saveable
 		i++
 	}
 	s.SaveBatch(batch[:i])
@@ -54,7 +54,7 @@ type SqlSaver struct {
 	currentDB      *sql.DB
 }
 
-func (ss *SqlSaver) InitPersistance(statusCh chan string, so Saveable) {
+func (ss *SqlSaver) InitPersistance(so Saveable) chan string {
 
 	// Prepare
 	log.Println("Initializing sqlite db...")
@@ -79,8 +79,10 @@ func (ss *SqlSaver) InitPersistance(statusCh chan string, so Saveable) {
 	}
 
 	// Close the db
+	statusCh := make(chan string)
 	go func() {
 		status := <-statusCh
+		// log.Println("receiving %s ...", status)
 		if status == "done" { // TODO: Rearrange closing db
 			err := db.Close()
 			if err != nil {
@@ -92,11 +94,13 @@ func (ss *SqlSaver) InitPersistance(statusCh chan string, so Saveable) {
 			log.Println("### ---------------")
 		}
 	}()
+
+	return (statusCh)
 }
 
 func (s *SqlSaver) SaveBatch(ss []Saveable) {
 	// Begin transaction
-	fmt.Println("Beginning Transaction...")
+	log.Println("Beginning Transaction...")
 	tx, err := s.currentDB.Begin()
 	if err != nil {
 		log.Fatal(err)
@@ -212,4 +216,15 @@ func (f *Filing) GetSavingStatements() []string {
 		)
 	}
 	return sqlStmts
+}
+
+func FilingToSaveable(from <-chan Filing) chan Saveable {
+	to := make(chan Saveable)
+	go func() {
+		for f := range from {
+			to <- &f
+		}
+		close(to)
+	}()
+	return to
 }
