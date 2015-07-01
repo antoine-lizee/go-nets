@@ -2,45 +2,59 @@ package go_nets
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
+//////////
 // Define a Saver interface and the listening function that goes with it
+//
 
 type Saver interface {
-	SaveFilingBatch([]Filing) // TODO add error handling
-	InitPersistance(chan string)
+	SaveBatch([]Saveable) // TODO add error handling
+	InitPersistance(chan string, Saveable)
 }
 
-func ListenAndSave(c <-chan Filing, s Saver) {
-	ch := make(chan string)
-	s.InitPersistance(ch)
+type Saveable interface {
+	GetInitStatements() []string
+	GetSavingStatements() []string
+}
+
+func ListenAndSave(c <-chan Saveable, s Saver) {
+	statusCh := make(chan string)
+	// Initialize the saving process
+	first := <-c
+	s.InitPersistance(statusCh, first)
 	batchSize := 1000
 	// Initialize
-	batch := make([]Filing, batchSize)
+	batch := make([]Saveable, batchSize)
 	i := 0
 	for f := range c {
 		if i == batchSize {
-			s.SaveFilingBatch(batch)
+			fmt.Println("Saving first batch...")
+			s.SaveBatch(batch)
 			i = 0
 		}
 		batch[i] = f
 		i++
 	}
-	s.SaveFilingBatch(batch[:i])
-	ch <- "done"
+	s.SaveBatch(batch[:i])
+	statusCh <- "done"
 }
 
-// Implement a sqlite saver
+//////////
+// Implement a sql saver
+//
 type SqlSaver struct {
 	dbPath, dbName string
 	DBDriver       string
 	currentDB      *sql.DB
 }
 
-func (ss *SqlSaver) InitPersistance(ch chan string) {
+func (ss *SqlSaver) InitPersistance(statusCh chan string, so Saveable) {
 
 	// Prepare
 	log.Println("Initializing sqlite db...")
@@ -56,80 +70,146 @@ func (ss *SqlSaver) InitPersistance(ch chan string) {
 	ss.currentDB = db
 
 	// Initialize the db (Create the tables...)
+	for _, sqlStmt := range so.GetInitStatements() {
+		_, err = db.Exec(sqlStmt)
+		if err != nil {
+			// log.Printf("%#v", err) //AL DEBUG
+			log.Printf("%q: %s\n", err, sqlStmt)
+		}
+	}
 
 	// Close the db
 	go func() {
-		status := <-ch
+		status := <-statusCh
 		if status == "done" { // TODO: Rearrange closing db
 			err := db.Close()
 			if err != nil {
 				log.Fatal(err)
 			}
 			os.Rename(tempFilePath, ss.dbPath+ss.dbName+".sqlite")
-			close(ch)
+			close(statusCh)
 			log.Printf("\n Successfully saved the filings in %v \n", time.Now().Sub(t0))
 			log.Println("### ---------------")
 		}
 	}()
 }
 
-// Define Filing as a Saver
-func (f *Filing) Persist(logger *log.Logger) {
-	noders := []Noder{}
-	nodeIds := map[string]bool{} //For checking
-	edgers := []Edger{}
-	// First check duplicates... [See the code of clean() in the parser file]
-	// We have to do that now to prevent from sending the useless stuff over the wire to the network and log wrong warnings...
-	// It may be inefficient to do this kind of things at three different places (parser removes empty agents, here + Network check against existing data.)
-	i := 0
-	for {
-		if i == len(f.Debtors) {
-			break
-		}
-		d := f.Debtors[i]
-		if nodeIds[d.GetIdentifier()] {
-			// a.Data := a.UpdateData // Not implemented yet. (+ not straightforward implementation since there is no data field yet)
-			logger.Println("DISPATCHER: removing debtor node", d.GetIdentifier(), "because of duplication.")
-			f.Debtors = DeleteAgent(f.Debtors, i)
-		} else {
-			nodeIds[d.GetIdentifier()] = true
-			i++
+func (s *SqlSaver) SaveBatch(ss []Saveable) {
+	// Begin transaction
+	fmt.Println("Beginning Transaction...")
+	tx, err := s.currentDB.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Load the statements
+	for _, saveable := range ss {
+		for _, sqlStmt := range saveable.GetSavingStatements() {
+			_, err = s.currentDB.Exec(sqlStmt)
+			if err != nil {
+				log.Printf("%q: %s\n", err, sqlStmt)
+			}
 		}
 	}
-	i = 0
-	for {
-		if i == len(f.Securers) {
-			break
-		}
-		s := f.Securers[i]
-		if nodeIds[s.GetIdentifier()] {
-			// a.Data := a.UpdateData // Not implemented yet. (+ not straightforward implementation since there is no data field yet)
-			logger.Println("DISPATCHER: removing securer node", s.GetIdentifier(), "because of duplication.")
-			f.Securers = DeleteAgent(f.Securers, i)
-		} else {
-			nodeIds[s.GetIdentifier()] = true
-			i++
-		}
+	// Commit
+	tx.Commit()
+}
+
+//////////
+// Implement the Filing as a saveable object. Rely on the primary keys mechanics and other sql constraints for uniqueness.
+//
+
+func (f *Filing) GetInitStatements() []string {
+	return []string{
+		`CREATE TABLE filings (
+			filingid INT PRIMARY KEY NOT NULL,
+			original_file_number INT,
+			file_number INT NOT NULL,
+			original_date TEXT,
+			date TEST,
+			xmlname VARCHAR(50),
+			method VARCHAR(50),
+			amendment VARCHAR(50),
+			type VARCHAR(50)
+			)`, // BTW, string length are not inforced by sqlite. Also, NOT NULL is necessary for primary keys
+		`CREATE TABLE agents (
+			agentid TEXT PRIMARY KEY NOT NULL,
+			organisation_name VARCHAR(250),
+			first_name VARCHAR(250),
+			middle_name VARCHAR(250),
+			last_name VARCHAR(250),
+			mail_address VARCHAR(250),
+			city VARCHAR(250),
+			state VARCHAR(250),
+			postal_code VARCHAR(250),
+			country VARCHAR(250)
+			)`,
+		`CREATE TABLE debtors (
+			filingid INT,
+			agentid TEXT,
+			FOREIGN KEY(filingid) REFERENCES filings(filingid),
+			FOREIGN KEY(agentid) REFERENCES agents(agentid)
+			)`,
+		`CREATE TABLE securers (
+			filingid INT,
+			agentid TEXT,
+			FOREIGN KEY(filingid) REFERENCES filings(filingid),
+			FOREIGN KEY(agentid) REFERENCES agents(agentid)
+			)`,
 	}
-	// Do the actual dispatching now that it's clean...
-	for i, d := range f.Debtors {
-		d := d
-		noders = append(noders, &d)
-		// Add the RR Edges
-		for j := i + 1; j < len(f.Debtors); j++ {
-			edgers = append(edgers, f.NewFilingEdger(RR, d.GetIdentifier(), f.Debtors[j].GetIdentifier()))
-		}
+}
+
+func (f *Filing) GetSavingStatements() []string {
+	sqlStmts := []string{}
+	// Add the filing itself
+	sqlStmts = append(sqlStmts,
+		fmt.Sprintf("INSERT INTO filings VALUES ("+strings.Repeat("%v, ", 8)+"%v"+")",
+			f.OriginalFileNumber,
+			f.OriginalFileNumber,
+			f.FileNumber,
+			f.OriginalFileDate,
+			f.FileDate,
+			f.XMLName.Local,
+			f.Method.Attr,
+			f.Amendment.Attr,
+			f.FilingType.Attr),
+	)
+	// Add the debtors and their lookups
+	for _, d := range f.Debtors {
+		sqlStmts = append(sqlStmts,
+			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("%v, ", 9)+"%v"+")",
+				d.GetIdentifier(),
+				d.OrganizationName,
+				d.IndividualName.FirstName,
+				d.IndividualName.MiddleName,
+				d.IndividualName.LastName,
+				d.MailAddress,
+				d.City,
+				d.State,
+				d.PostalCode,
+				d.Country),
+			fmt.Sprintf("INSERT INTO debtors VALUES (%v, %v)",
+				f.OriginalFileNumber,
+				d.GetIdentifier()),
+		)
 	}
-	for i, s := range f.Securers {
-		s := s
-		noders = append(noders, &s)
-		// Add the EE Edges
-		for j := i + 1; j < len(f.Securers); j++ {
-			edgers = append(edgers, f.NewFilingEdger(EE, s.GetIdentifier(), f.Securers[j].GetIdentifier()))
-		}
-		// Add the ER Edges :
-		for _, d := range f.Debtors {
-			edgers = append(edgers, f.NewFilingEdger(ER, s.GetIdentifier(), d.GetIdentifier()))
-		}
+	// Add the securers and their lookups
+	for _, sec := range f.Securers {
+		sqlStmts = append(sqlStmts,
+			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("%v, ", 9)+"%v"+")",
+				sec.GetIdentifier(),
+				sec.OrganizationName,
+				sec.IndividualName.FirstName,
+				sec.IndividualName.MiddleName,
+				sec.IndividualName.LastName,
+				sec.MailAddress,
+				sec.City,
+				sec.State,
+				sec.PostalCode,
+				sec.Country),
+			fmt.Sprintf("INSERT INTO securers VALUES (%v, %v)",
+				f.OriginalFileNumber,
+				sec.GetIdentifier()),
+		)
 	}
+	return sqlStmts
 }

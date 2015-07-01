@@ -27,7 +27,7 @@ func (a *Agent) GetIdentifier() string {
 	}
 }
 
-func (a *Agent) GetKind() NodeKind {
+func (a *Agent) GetKind() NodeKind { // TODO: change to organisation/individual. The agent kind doesn't necessarilly correlate with the Node kind later on.
 	if a.OrganizationName != "" {
 		return Emitter
 	} else {

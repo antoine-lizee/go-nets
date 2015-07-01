@@ -10,7 +10,7 @@ import (
 func TestParser(t *testing.T) {
 	fmt.Println("### TESTING the parser (big file)")
 	Parser := XmlParser{
-		FileDir:  "_test",
+		FileDir:  "_test/",
 		FileName: "UMtest2.xml",
 	}
 	cs := make(chan Filing)
