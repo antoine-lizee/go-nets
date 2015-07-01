@@ -10,7 +10,6 @@ import (
 	"os"
 	"regexp"
 	"sort"
-	"strconv"
 	"sync"
 
 	"github.com/gonum/floats"
@@ -1332,7 +1331,7 @@ func (nn *Network) PageRankMatrix() map[*Node]float32 {
 	diff := 1.0
 	i := 0
 	for diff > 1e-8 { // diff > 1e-3
-		DumpMat64Mat(D, "_test/"+strconv.Itoa(i))
+		// DumpMat64Mat(D, "_test/"+strconv.Itoa(i)) only when testing, doesn't compile in normal build
 		i++
 		Di.Mul(D, D)
 		D.Sub(Di, D)
