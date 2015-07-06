@@ -23,11 +23,13 @@ type Saveable interface {
 	GetSavingStatements() []string
 }
 
+const BatchSize int = 1000
+
 func ListenAndSave(c <-chan Saveable, s Saver) {
 	// Initialize the saving process
 	first := <-c
 	statusCh := s.InitPersistance(first)
-	batchSize := 1000
+	batchSize := BatchSize
 	// Initialize
 	batch := make([]Saveable, batchSize)
 	i := 0
@@ -64,6 +66,10 @@ func (ss *SqlSaver) InitPersistance(so Saveable) chan string {
 
 	// Open/Create the database
 	db, err := sql.Open(ss.DBDriver, tempFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -232,13 +238,14 @@ func FilingToSaveable(from <-chan Filing) chan Saveable {
 
 ///////////
 // Implement a filing specific version of the SaveBatch in order to speed up greatly the execution thanks to prepared state;ents
-// Ends up being 20ish % faster (not much)
+// Ends up being the same speed, but more reliable bc no need for value-quoting in the SQL statement.
+//
 
 func ListenAndSaveFilings(c <-chan Filing, s *SqlSaver) {
 	// Initialize the saving process
 	first := <-c
 	statusCh := s.InitPersistance(first)
-	batchSize := 100
+	batchSize := BatchSize
 	// Initialize
 	batch := make([]Filing, batchSize)
 	i := 0
