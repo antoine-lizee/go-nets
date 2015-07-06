@@ -8,9 +8,13 @@ import (
 	"code.google.com/p/go.text/encoding/charmap"
 )
 
+func init() {
+	initiateMultiCore(1)
+}
+
 func TestSaver(t *testing.T) {
-	filename := "UMtest.xml"
-	fmt.Println("### TESTING the saver (small file)")
+	filename := "UMtest2.xml"
+	fmt.Println("### TESTING the saver (big file)")
 	Parser := XmlParser{
 		FileDir:  "_test/",
 		FileName: filename,

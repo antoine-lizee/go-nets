@@ -24,7 +24,7 @@ import (
 var testFolder = "_test/"
 
 func initiateMultiCore(nCores int) {
-	fmt.Println("Total Number of cores:", runtime.NumCPU())
+	fmt.Println("Total Number of available cores:", runtime.NumCPU())
 	fmt.Println("Enabling parallelisation with", nCores, "cores")
 	runtime.GOMAXPROCS(nCores)
 }

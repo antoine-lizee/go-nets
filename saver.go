@@ -108,7 +108,7 @@ func (s *SqlSaver) SaveBatch(ss []Saveable) {
 	// Load the statements
 	for _, saveable := range ss {
 		for _, sqlStmt := range saveable.GetSavingStatements() {
-			_, err = s.currentDB.Exec(sqlStmt)
+			_, err = tx.Exec(sqlStmt)
 			if err != nil {
 				log.Printf("%q: %s\n", err, sqlStmt)
 			}
@@ -122,51 +122,51 @@ func (s *SqlSaver) SaveBatch(ss []Saveable) {
 // Implement the Filing as a saveable object. Rely on the primary keys mechanics and other sql constraints for uniqueness.
 //
 
-func (f *Filing) GetInitStatements() []string {
+func (f Filing) GetInitStatements() []string {
 	return []string{
 		`CREATE TABLE filings (
-			filingid INT PRIMARY KEY NOT NULL,
-			original_file_number INT,
-			file_number INT NOT NULL,
-			original_date TEXT,
-			date TEST,
-			xmlname VARCHAR(50),
-			method VARCHAR(50),
-			amendment VARCHAR(50),
-			type VARCHAR(50)
+				filingid INT PRIMARY KEY NOT NULL,
+				original_file_number INT,
+				file_number INT NOT NULL,
+				original_date TEXT,
+				date TEST,
+				xmlname VARCHAR(50),
+				method VARCHAR(50),
+				amendment VARCHAR(50),
+				type VARCHAR(50)
 			)`, // BTW, string length are not inforced by sqlite. Also, NOT NULL is necessary for primary keys
 		`CREATE TABLE agents (
-			agentid TEXT PRIMARY KEY NOT NULL,
-			organisation_name VARCHAR(250),
-			first_name VARCHAR(250),
-			middle_name VARCHAR(250),
-			last_name VARCHAR(250),
-			mail_address VARCHAR(250),
-			city VARCHAR(250),
-			state VARCHAR(250),
-			postal_code VARCHAR(250),
-			country VARCHAR(250)
-			)`,
+		agentid TEXT PRIMARY KEY NOT NULL,
+		organisation_name VARCHAR(250),
+		first_name VARCHAR(250),
+		middle_name VARCHAR(250),
+		last_name VARCHAR(250),
+		mail_address VARCHAR(250),
+		city VARCHAR(250),
+		state VARCHAR(250),
+		postal_code VARCHAR(250),
+		country VARCHAR(250)
+		)`,
 		`CREATE TABLE debtors (
-			filingid INT,
-			agentid TEXT,
-			FOREIGN KEY(filingid) REFERENCES filings(filingid),
-			FOREIGN KEY(agentid) REFERENCES agents(agentid)
-			)`,
+		filingid INT,
+		agentid TEXT,
+		FOREIGN KEY(filingid) REFERENCES filings(filingid),
+		FOREIGN KEY(agentid) REFERENCES agents(agentid)
+		)`,
 		`CREATE TABLE securers (
-			filingid INT,
-			agentid TEXT,
-			FOREIGN KEY(filingid) REFERENCES filings(filingid),
-			FOREIGN KEY(agentid) REFERENCES agents(agentid)
-			)`,
+		filingid INT,
+		agentid TEXT,
+		FOREIGN KEY(filingid) REFERENCES filings(filingid),
+		FOREIGN KEY(agentid) REFERENCES agents(agentid)
+		)`,
 	}
 }
 
-func (f *Filing) GetSavingStatements() []string {
+func (f Filing) GetSavingStatements() []string {
 	sqlStmts := []string{}
 	// Add the filing itself
 	sqlStmts = append(sqlStmts,
-		fmt.Sprintf("INSERT INTO filings VALUES ("+strings.Repeat("%v, ", 8)+"%v"+")",
+		fmt.Sprintf("INSERT INTO filings VALUES ("+strings.Repeat("\"%v\", ", 8)+"\"%v\""+")",
 			f.OriginalFileNumber,
 			f.OriginalFileNumber,
 			f.FileNumber,
@@ -180,7 +180,7 @@ func (f *Filing) GetSavingStatements() []string {
 	// Add the debtors and their lookups
 	for _, d := range f.Debtors {
 		sqlStmts = append(sqlStmts,
-			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("%v, ", 9)+"%v"+")",
+			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("\"%v\", ", 9)+"\"%v\""+")",
 				d.GetIdentifier(),
 				d.OrganizationName,
 				d.IndividualName.FirstName,
@@ -191,7 +191,7 @@ func (f *Filing) GetSavingStatements() []string {
 				d.State,
 				d.PostalCode,
 				d.Country),
-			fmt.Sprintf("INSERT INTO debtors VALUES (%v, %v)",
+			fmt.Sprintf("INSERT INTO debtors VALUES (\"%v\", \"%v\")",
 				f.OriginalFileNumber,
 				d.GetIdentifier()),
 		)
@@ -199,7 +199,7 @@ func (f *Filing) GetSavingStatements() []string {
 	// Add the securers and their lookups
 	for _, sec := range f.Securers {
 		sqlStmts = append(sqlStmts,
-			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("%v, ", 9)+"%v"+")",
+			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("\"%v\", ", 9)+"\"%v\""+")",
 				sec.GetIdentifier(),
 				sec.OrganizationName,
 				sec.IndividualName.FirstName,
@@ -210,7 +210,7 @@ func (f *Filing) GetSavingStatements() []string {
 				sec.State,
 				sec.PostalCode,
 				sec.Country),
-			fmt.Sprintf("INSERT INTO securers VALUES (%v, %v)",
+			fmt.Sprintf("INSERT INTO securers VALUES (\"%v\", \"%v\")",
 				f.OriginalFileNumber,
 				sec.GetIdentifier()),
 		)
