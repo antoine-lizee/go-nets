@@ -37,7 +37,7 @@ func ListenAndSave(c <-chan Saveable, s Saver) {
 			s.SaveBatch(batch)
 			i = 0
 		}
-		log.Printf("\r Filing number %d received, with id %d.", i, saveable.(*Filing).OriginalFileNumber)
+		// log.Printf("Filing number %d received, with id %d.", i, saveable.(Filing).OriginalFileNumber)
 		batch[i] = saveable
 		i++
 	}
@@ -222,9 +222,131 @@ func FilingToSaveable(from <-chan Filing) chan Saveable {
 	to := make(chan Saveable)
 	go func() {
 		for f := range from {
-			to <- &f
+			to <- f
+			// fmt.Printf("\n Casting and passing around record number %d", f.OriginalFileNumber)
 		}
 		close(to)
 	}()
 	return to
+}
+
+///////////
+// Implement a filing specific version of the SaveBatch in order to speed up greatly the execution thanks to prepared state;ents
+// Ends up being 20ish % faster (not much)
+
+func ListenAndSaveFilings(c <-chan Filing, s *SqlSaver) {
+	// Initialize the saving process
+	first := <-c
+	statusCh := s.InitPersistance(first)
+	batchSize := 100
+	// Initialize
+	batch := make([]Filing, batchSize)
+	i := 0
+	for filing := range c {
+		if i == batchSize {
+			log.Println("Saving first batch...")
+			s.SaveFilingBatch(batch)
+			i = 0
+		}
+		// log.Printf("Filing number %d received, with id %d.", i, saveable.(Filing).OriginalFileNumber)
+		batch[i] = filing
+		i++
+	}
+	s.SaveFilingBatch(batch[:i])
+	statusCh <- "done"
+}
+
+//
+func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
+	// Begin Transaction
+	log.Println("Beginning Transaction...")
+	tx, err := ss.currentDB.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Prepare Statements
+	preparationStmts := map[string]string{
+		"filings":  "INSERT INTO filings VALUES (" + strings.Repeat("?, ", 8) + "?" + ")",
+		"agents":   "INSERT INTO agents VALUES (" + strings.Repeat("?, ", 9) + "?" + ")",
+		"debtors":  "INSERT INTO debtors VALUES (?, ?)",
+		"securers": "INSERT INTO securers VALUES (?, ?)",
+	}
+	preparedStmts := make(map[string]*sql.Stmt)
+	for key, stmt := range preparationStmts {
+		preparedStmts[key], err = tx.Prepare(stmt)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer preparedStmts[key].Close()
+	}
+
+	// Add Statements
+	for _, f := range batch {
+		// Add the filing itself
+		_, err = preparedStmts["filings"].Exec(
+			f.OriginalFileNumber,
+			f.OriginalFileNumber,
+			f.FileNumber,
+			f.OriginalFileDate,
+			f.FileDate,
+			f.XMLName.Local,
+			f.Method.Attr,
+			f.Amendment.Attr,
+			f.FilingType.Attr)
+		if err != nil {
+			log.Printf("%q: %s\n", err, f.OriginalFileNumber)
+		}
+		// Add the debtors and their lookups
+		for _, d := range f.Debtors {
+			_, err = preparedStmts["agents"].Exec(
+				d.GetIdentifier(),
+				d.OrganizationName,
+				d.IndividualName.FirstName,
+				d.IndividualName.MiddleName,
+				d.IndividualName.LastName,
+				d.MailAddress,
+				d.City,
+				d.State,
+				d.PostalCode,
+				d.Country)
+			if err != nil {
+				log.Printf("%q. As Debtor: %s\n", err, d.GetIdentifier())
+			}
+			_, err = preparedStmts["debtors"].Exec(
+				f.OriginalFileNumber,
+				d.GetIdentifier())
+			if err != nil {
+				log.Printf("%q\n", err)
+			}
+		}
+		// Add the securers and their lookups
+		for _, sec := range f.Securers {
+			_, err = preparedStmts["agents"].Exec(
+				sec.GetIdentifier(),
+				sec.OrganizationName,
+				sec.IndividualName.FirstName,
+				sec.IndividualName.MiddleName,
+				sec.IndividualName.LastName,
+				sec.MailAddress,
+				sec.City,
+				sec.State,
+				sec.PostalCode,
+				sec.Country)
+			if err != nil {
+				log.Printf("%q. As Securer: %s \n", err, sec.GetIdentifier())
+			}
+			_, err = preparedStmts["securers"].Exec(
+				f.OriginalFileNumber,
+				sec.GetIdentifier())
+			if err != nil {
+				log.Printf("%q\n", err)
+			}
+		}
+	}
+
+	// Commit
+	log.Println("Commiting Transaction...")
+	tx.Commit()
+
 }
