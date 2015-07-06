@@ -21,7 +21,6 @@ func TestParser(t *testing.T) {
 	go Parser.Parse(cs, ioutil.Discard) // Put nil instead of Discard to get the default stdout logging behaviour
 	i := 0
 	for p := range cs {
-		// p := <-cs
 		i++
 		fmt.Printf("\r Filing number %d parsed, with id %d.", i, p.OriginalFileNumber)
 	}
@@ -40,7 +39,6 @@ func TestParserVerbose(t *testing.T) {
 	i := 0
 	for p := range cs {
 		fmt.Println("\nReceived the filing object from the channel")
-		// p := <-cs
 		i++
 		fmt.Printf("Filing number %d parsed, with id %d.\n", i, p.OriginalFileNumber)
 		pretty.Printf("%# v\n", p)
