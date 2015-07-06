@@ -17,10 +17,13 @@ var (
 		input    string
 		expected string
 	}{
-		{"On Deck Capital, Inc.", "ondeckcapital"},
-		{"ROCKWALL CAPITAL L.L.C.", "rockwallcapital"},
-		{"CNH Capital America LLC  ", "cnhcapitalamerica"},
-		{" INNOVATIVE EQUIPMENT TECHNOLOGY, INC.", "innovativeequipmenttechnology"},
+		{"On Deck Capital, Inc.", "on_deck_capital"},
+		{"ROCKWALL CAPITAL L.L.C.", "rockwall_capital"},
+		{"CNH Capital   America LLC  ", "cnh_capital_america"},
+		{"CNH Capital America, LLC  AS \"office\". Yeah", "cnh_capital_america_as_office_yeah"},
+		{" INNOVATIVE EQUIPMENT TECHNOLOGY, INC.", "innovative_equipment_technology"},
+		{" RABOBANK N.A., A NATIONAL BANKING ASSOCIATION, ON BEHALF OF ITSELF AND, TO THE EXTENT APPPLICABLE, AS AGENT FOR ANY OTHER SECURED PARTIES UNDER THE DEED OF TRUST DATED AS OF JUNE 11, 2013, BY DEBTOR FOR THE BENEFIT OF SECURED PARTY (COLLECTIVELY",
+			"rabobank_na_a_national_banking_association_on_beha"},
 	}
 )
 

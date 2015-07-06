@@ -8,10 +8,25 @@ import (
 )
 
 // Bloc Subfunctions
+func MinInt(x, y int) (r int) {
+	if x < y {
+		return x
+	}
+	return y
+}
+
 func Atomize(s string) string {
-	re := regexp.MustCompile(",? +(inc|l\\.?l\\.?c|as representative|p.c.|co|as agent).?")
-	re2 := regexp.MustCompile(" |\\.|\\,")
-	return re2.ReplaceAllString(re.ReplaceAllString(strings.ToLower(s), ""), "")
+	reSpaces := regexp.MustCompile(" +")
+	reIdent := regexp.MustCompile(",? +(inc|l\\.?l\\.?c|as representative|p.c.|co|as agent).?")
+	rePunct := regexp.MustCompile("\\.|\\,|\\'|\\\"")
+	res := reSpaces.ReplaceAllString(
+		reIdent.ReplaceAllString(
+			rePunct.ReplaceAllString(
+				strings.ToLower(strings.TrimSpace(s)),
+				""),
+			""),
+		"_")
+	return res[0:MinInt(50, len(res))]
 }
 
 func (i *IndividualName) String() string {
