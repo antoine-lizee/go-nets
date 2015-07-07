@@ -102,6 +102,7 @@ func Parse(fileNames []string) chan go_nets.Filing {
 	}
 	//Launch the parsers
 	for i, parser := range parsers {
+		parser := parser
 		fmt.Println("Starting parsing for file " + parser.FileName)
 		fi := openFile(*savePathArg + parser.FileName + ".log")
 		csi := cs[i]

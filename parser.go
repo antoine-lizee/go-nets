@@ -127,6 +127,7 @@ func (p *XmlParser) Parse(c chan Filing, logDst io.Writer) {
 	if errOs != nil {
 		panic(errOs)
 	}
+	logger.Println("Opening file: ", p.FileName)
 	defer func() {
 		if errOs = fi.Close(); errOs != nil {
 			panic(errOs)
