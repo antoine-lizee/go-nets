@@ -23,35 +23,37 @@ type Saveable interface {
 	GetSavingStatements() []string
 }
 
-const BatchSize int = 1000
+const BatchSize int = 10000
 
-func ListenAndSave(c <-chan Saveable, s Saver) {
+func ListenAndSave(c chan Saveable, s Saver) {
 	// Initialize the saving process
 	first := <-c
 	statusCh := s.InitPersistance(first)
 	batchSize := BatchSize
 	// Initialize
 	batch := make([]Saveable, batchSize)
-	i := 0
+	batch[0] = first
+	i := 1
 	for saveable := range c {
 		if i == batchSize {
 			log.Println("Saving first batch...")
 			s.SaveBatch(batch)
 			i = 0
 		}
-		// log.Printf("Filing number %d received, with id %d.", i, saveable.(Filing).OriginalFileNumber)
+		// log.Printf("Filing number %d received, with id %d.", i, saveable.(Filing).FileNumber)
 		batch[i] = saveable
 		i++
 	}
 	s.SaveBatch(batch[:i])
 	statusCh <- "done"
+	<-statusCh
 }
 
 //////////
 // Implement a sql saver
 //
 type SqlSaver struct {
-	dbPath, dbName string
+	DbPath, DbName string
 	DBDriver       string
 	currentDB      *sql.DB
 }
@@ -61,7 +63,7 @@ func (ss *SqlSaver) InitPersistance(so Saveable) chan string {
 	// Prepare
 	log.Println("Initializing sqlite db...")
 	t0 := time.Now()
-	tempFilePath := ss.dbPath + ss.dbName + TempSuffix
+	tempFilePath := ss.DbPath + ss.DbName + TempSuffix
 	os.Remove(tempFilePath)
 
 	// Open/Create the database
@@ -94,10 +96,10 @@ func (ss *SqlSaver) InitPersistance(so Saveable) chan string {
 			if err != nil {
 				log.Fatal(err)
 			}
-			os.Rename(tempFilePath, ss.dbPath+ss.dbName+".sqlite")
-			close(statusCh)
+			os.Rename(tempFilePath, ss.DbPath+ss.DbName+".sqlite")
 			log.Printf("\n Successfully saved the filings in %v \n", time.Now().Sub(t0))
 			log.Println("### ---------------")
+			close(statusCh)
 		}
 	}()
 
@@ -139,7 +141,8 @@ func (f Filing) GetInitStatements() []string {
 				xmlname VARCHAR(50),
 				method VARCHAR(50),
 				amendment VARCHAR(50),
-				type VARCHAR(50)
+				type VARCHAR(50),
+				alt_type VARCHAR(50)
 			)`, // BTW, string length are not inforced by sqlite. Also, NOT NULL is necessary for primary keys
 		`CREATE TABLE agents (
 		agentid TEXT PRIMARY KEY NOT NULL,
@@ -172,8 +175,8 @@ func (f Filing) GetSavingStatements() []string {
 	sqlStmts := []string{}
 	// Add the filing itself
 	sqlStmts = append(sqlStmts,
-		fmt.Sprintf("INSERT INTO filings VALUES ("+strings.Repeat("\"%v\", ", 8)+"\"%v\""+")",
-			f.OriginalFileNumber,
+		fmt.Sprintf("INSERT INTO filings VALUES ("+strings.Repeat("\"%v\", ", 9)+"\"%v\""+")",
+			f.FileNumber,
 			f.OriginalFileNumber,
 			f.FileNumber,
 			f.OriginalFileDate,
@@ -181,7 +184,8 @@ func (f Filing) GetSavingStatements() []string {
 			f.XMLName.Local,
 			f.Method.Attr,
 			f.Amendment.Attr,
-			f.FilingType.Attr),
+			f.FilingType.Attr,
+			f.AltFilingType.Attr),
 	)
 	// Add the debtors and their lookups
 	for _, d := range f.Debtors {
@@ -198,7 +202,7 @@ func (f Filing) GetSavingStatements() []string {
 				d.PostalCode,
 				d.Country),
 			fmt.Sprintf("INSERT INTO debtors VALUES (\"%v\", \"%v\")",
-				f.OriginalFileNumber,
+				f.FileNumber,
 				d.GetIdentifier()),
 		)
 	}
@@ -217,7 +221,7 @@ func (f Filing) GetSavingStatements() []string {
 				sec.PostalCode,
 				sec.Country),
 			fmt.Sprintf("INSERT INTO securers VALUES (\"%v\", \"%v\")",
-				f.OriginalFileNumber,
+				f.FileNumber,
 				sec.GetIdentifier()),
 		)
 	}
@@ -229,7 +233,7 @@ func FilingToSaveable(from <-chan Filing) chan Saveable {
 	go func() {
 		for f := range from {
 			to <- f
-			// fmt.Printf("\n Casting and passing around record number %d", f.OriginalFileNumber)
+			// fmt.Printf("\n Casting and passing around record number %d", f.FileNumber)
 		}
 		close(to)
 	}()
@@ -241,26 +245,28 @@ func FilingToSaveable(from <-chan Filing) chan Saveable {
 // Ends up being the same speed, but more reliable bc no need for value-quoting in the SQL statement.
 //
 
-func ListenAndSaveFilings(c <-chan Filing, s *SqlSaver) {
+func ListenAndSaveFilings(c chan Filing, s *SqlSaver) {
 	// Initialize the saving process
 	first := <-c
 	statusCh := s.InitPersistance(first)
 	batchSize := BatchSize
 	// Initialize
 	batch := make([]Filing, batchSize)
-	i := 0
+	batch[0] = first
+	i := 1
 	for filing := range c {
 		if i == batchSize {
 			log.Println("Saving first batch...")
 			s.SaveFilingBatch(batch)
 			i = 0
 		}
-		// log.Printf("Filing number %d received, with id %d.", i, saveable.(Filing).OriginalFileNumber)
+		// log.Printf("Filing number %d received, with id %d.", i, saveable.(Filing).FileNumber)
 		batch[i] = filing
 		i++
 	}
 	s.SaveFilingBatch(batch[:i])
 	statusCh <- "done"
+	<-statusCh
 }
 
 //
@@ -274,7 +280,7 @@ func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
 
 	// Prepare Statements
 	preparationStmts := map[string]string{
-		"filings":  "INSERT INTO filings VALUES (" + strings.Repeat("?, ", 8) + "?" + ")",
+		"filings":  "INSERT INTO filings VALUES (" + strings.Repeat("?, ", 9) + "?" + ")",
 		"agents":   "INSERT INTO agents VALUES (" + strings.Repeat("?, ", 9) + "?" + ")",
 		"debtors":  "INSERT INTO debtors VALUES (?, ?)",
 		"securers": "INSERT INTO securers VALUES (?, ?)",
@@ -292,7 +298,7 @@ func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
 	for _, f := range batch {
 		// Add the filing itself
 		_, err = preparedStmts["filings"].Exec(
-			f.OriginalFileNumber,
+			f.FileNumber,
 			f.OriginalFileNumber,
 			f.FileNumber,
 			f.OriginalFileDate,
@@ -300,9 +306,10 @@ func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
 			f.XMLName.Local,
 			f.Method.Attr,
 			f.Amendment.Attr,
-			f.FilingType.Attr)
+			f.FilingType.Attr,
+			f.AltFilingType.Attr)
 		if err != nil {
-			log.Printf("%q: %s\n", err, f.OriginalFileNumber)
+			log.Printf("%q: %v\n", err, f.FileNumber)
 		}
 		// Add the debtors and their lookups
 		for _, d := range f.Debtors {
@@ -321,7 +328,7 @@ func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
 				log.Printf("%q. As Debtor: %s\n", err, d.GetIdentifier())
 			}
 			_, err = preparedStmts["debtors"].Exec(
-				f.OriginalFileNumber,
+				f.FileNumber,
 				d.GetIdentifier())
 			if err != nil {
 				log.Printf("%q\n", err)
@@ -344,7 +351,7 @@ func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
 				log.Printf("%q. As Securer: %s \n", err, sec.GetIdentifier())
 			}
 			_, err = preparedStmts["securers"].Exec(
-				f.OriginalFileNumber,
+				f.FileNumber,
 				sec.GetIdentifier())
 			if err != nil {
 				log.Printf("%q\n", err)

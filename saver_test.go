@@ -21,8 +21,8 @@ func TestSaver(t *testing.T) {
 		Encoding: charmap.Windows1252,
 	}
 	TestSaver := &SqlSaver{
-		dbPath:   "_test/",
-		dbName:   filename,
+		DbPath:   "_test/",
+		DbName:   filename,
 		DBDriver: "sqlite3",
 	}
 	cs := make(chan Filing)
@@ -34,7 +34,7 @@ func TestSaver(t *testing.T) {
 	ListenAndSave(FilingToSaveable(cs), TestSaver)
 }
 
-func TestDirectSaver(t *testing.T) {
+func TestDirectSaver(t *testing.T) { // Gets more than above because of the non-discarded filings with " inside the fields.
 	filename := "UMtest2.xml"
 	fmt.Println("### TESTING the saver (big file)")
 	Parser := XmlParser{
@@ -43,8 +43,8 @@ func TestDirectSaver(t *testing.T) {
 		Encoding: charmap.Windows1252,
 	}
 	TestSaver := &SqlSaver{
-		dbPath:   "_test/",
-		dbName:   "direct" + filename,
+		DbPath:   "_test/",
+		DbName:   "direct" + filename,
 		DBDriver: "sqlite3",
 	}
 	cs := make(chan Filing)

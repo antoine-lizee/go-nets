@@ -38,7 +38,8 @@ type Filing struct {
 	XMLName            xml.Name            `xml:"FileDetail"`
 	Method             AttrMethodContainer `xml:"FilingMethod"`
 	Amendment          AttrTypeContainer   `xml:"AmendmentType"`
-	FilingType         AttrTypeContainer   `xml:"AltFilingType"`
+	FilingType         AttrTypeContainer   `xml:"TransType"`
+	AltFilingType      AttrTypeContainer   `xml:"AltFilingType"`
 	OriginalFileNumber int
 	FileNumber         int
 	OriginalFileDate   string
