@@ -23,7 +23,7 @@ type Saveable interface {
 	GetSavingStatements() []string
 }
 
-const BatchSize int = 10000
+var BatchSize int = 10000
 
 func ListenAndSave(c chan Saveable, s Saver) {
 	// Initialize the saving process
@@ -190,7 +190,7 @@ func (f Filing) GetSavingStatements() []string {
 	// Add the debtors and their lookups
 	for _, d := range f.Debtors {
 		sqlStmts = append(sqlStmts,
-			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("\"%v\", ", 9)+"\"%v\""+")",
+			fmt.Sprintf("INSERT OR IGNORE INTO agents VALUES ("+strings.Repeat("\"%v\", ", 9)+"\"%v\""+")",
 				d.GetIdentifier(),
 				d.OrganizationName,
 				d.IndividualName.FirstName,
@@ -209,7 +209,7 @@ func (f Filing) GetSavingStatements() []string {
 	// Add the securers and their lookups
 	for _, sec := range f.Securers {
 		sqlStmts = append(sqlStmts,
-			fmt.Sprintf("INSERT INTO agents VALUES ("+strings.Repeat("\"%v\", ", 9)+"\"%v\""+")",
+			fmt.Sprintf("INSERT OR IGNORE INTO agents VALUES ("+strings.Repeat("\"%v\", ", 9)+"\"%v\""+")",
 				sec.GetIdentifier(),
 				sec.OrganizationName,
 				sec.IndividualName.FirstName,
@@ -281,7 +281,7 @@ func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
 	// Prepare Statements
 	preparationStmts := map[string]string{
 		"filings":  "INSERT INTO filings VALUES (" + strings.Repeat("?, ", 9) + "?" + ")",
-		"agents":   "INSERT INTO agents VALUES (" + strings.Repeat("?, ", 9) + "?" + ")",
+		"agents":   "INSERT OR IGNORE INTO agents VALUES (" + strings.Repeat("?, ", 9) + "?" + ")",
 		"debtors":  "INSERT INTO debtors VALUES (?, ?)",
 		"securers": "INSERT INTO securers VALUES (?, ?)",
 	}

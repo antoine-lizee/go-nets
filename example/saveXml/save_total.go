@@ -36,10 +36,20 @@ var (
 	savePathArg  = flag.String("savePath", "./", "Provide the path of the output files")
 	parseArgs    = FileNames{}
 	nameArg      = flag.String("name", "Total", "Provide the name of the database")
+	batchSizeArg = flag.Int("batchSize", 50000, "Provide the size of the saving batches.")
 )
+
+const usageMsg string = "save_total -parsePath=[] -parse=[,] -name=[] -savePathe=[]\n"
 
 func init() {
 	flag.Var(&parseArgs, "parse", "Specify a comma separated list of file names for parsing")
+	flag.Usage = usage
+}
+
+func usage() {
+	fmt.Printf(usageMsg)
+	flag.PrintDefaults()
+	os.Exit(2)
 }
 
 ////////////
@@ -126,10 +136,11 @@ func main() {
 
 	// Parse the command line arguments
 	flag.Parse()
+	go_nets.BatchSize = *batchSizeArg
 
 	//Main log setup
 	// fiLog := openFile(*savePathArg + "save_total.log")
-	fiLog := openFile(*savePathArg + "save_total.log")
+	fiLog := openFile(*savePathArg + *nameArg + ".log")
 	defer closeFile(fiLog)
 
 	log.SetOutput(io.MultiWriter(os.Stdout, fiLog))

@@ -150,6 +150,7 @@ func (p *XmlParser) Parse(c chan Filing, logDst io.Writer) {
 		if t == nil {
 			close(c)
 			if err != io.EOF {
+				fmt.Println("Error for file " + p.FileName + "...")
 				log.Fatal(err)
 			}
 			break
