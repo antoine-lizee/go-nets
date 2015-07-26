@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 
 	"code.google.com/p/go.text/encoding/charmap"
@@ -37,6 +38,7 @@ var (
 	parseArgs    = FileNames{}
 	nameArg      = flag.String("name", "Total", "Provide the name of the database")
 	batchSizeArg = flag.Int("batchSize", 50000, "Provide the size of the saving batches.")
+	nCores       = flag.Int("nCores", 4, "Provide the number of cores for multi-threading.")
 )
 
 const usageMsg string = "save_total -parsePath=[] -parse=[,] -name=[] -savePathe=[]\n"
@@ -98,7 +100,7 @@ func closeFile(fi *os.File) {
 func Parse(fileNames []string) chan go_nets.Filing {
 	//Prepare the parsers and channels
 	parsers := []go_nets.XmlParser{}
-	out := make(chan go_nets.Filing)
+	out := make(chan go_nets.Filing, *batchSizeArg)
 	cs := []chan go_nets.Filing{}
 	for _, fileName := range fileNames {
 		fileName := fileName
@@ -137,6 +139,7 @@ func main() {
 	// Parse the command line arguments
 	flag.Parse()
 	go_nets.BatchSize = *batchSizeArg
+	runtime.GOMAXPROCS(*nCores)
 
 	//Main log setup
 	// fiLog := openFile(*savePathArg + "save_total.log")

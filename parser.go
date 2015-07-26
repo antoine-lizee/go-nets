@@ -148,11 +148,17 @@ func (p *XmlParser) Parse(c chan Filing, logDst io.Writer) {
 		// Read tokens from the XML document in a stream.
 		t, err := decoder.Token()
 		if t == nil {
-			close(c)
 			if err != io.EOF {
 				fmt.Println("Error for file " + p.FileName + "...")
-				log.Fatal(err)
+				log.Println(err)
+				// err = decoder.Skip() // Doesn't work, will bump into the same error again.
+				// if err == nil {
+				// 	fmt.Println("Skipping token...")
+				// 	continue
+				// }
+				// log.Println(err)
 			}
+			close(c)
 			break
 		}
 		// Inspect the type of the token just read.
@@ -177,7 +183,7 @@ func (p *XmlParser) Parse(c chan Filing, logDst io.Writer) {
 		}
 	}
 	t1 := time.Now()
-	fmt.Printf("\n Successfully parsed %d filings in %v \n", i, t1.Sub(t0))
+	fmt.Printf("\n Successfully parsed %d filings in %v from file %s. \n", i, t1.Sub(t0), p.FileName)
 }
 
 type OnOffWriter struct {
@@ -266,5 +272,5 @@ func (p *XmlParser) ParseVerbose(c chan Filing, logDst io.Writer) { // Only for 
 		}
 	}
 	t1 := time.Now()
-	fmt.Printf("\n Successfully parsed %d filings in %v \n", i, t1.Sub(t0))
+	fmt.Printf("\n Successfully parsed %d filings in %v from file %s. \n", i, t1.Sub(t0), p.FileName)
 }

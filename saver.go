@@ -36,7 +36,6 @@ func ListenAndSave(c chan Saveable, s Saver) {
 	i := 1
 	for saveable := range c {
 		if i == batchSize {
-			log.Println("Saving first batch...")
 			s.SaveBatch(batch)
 			i = 0
 		}
@@ -85,6 +84,7 @@ func (ss *SqlSaver) InitPersistance(so Saveable) chan string {
 			log.Printf("%q: %s\n", err, sqlStmt)
 		}
 	}
+	log.Println("DB Initialized.")
 
 	// Close the db
 	statusCh := make(chan string)
@@ -123,7 +123,9 @@ func (s *SqlSaver) SaveBatch(ss []Saveable) {
 		}
 	}
 	// Commit
+	log.Println("Commiting Transaction...")
 	tx.Commit()
+	log.Println("Transaction committed.")
 }
 
 //////////
@@ -256,7 +258,6 @@ func ListenAndSaveFilings(c chan Filing, s *SqlSaver) {
 	i := 1
 	for filing := range c {
 		if i == batchSize {
-			log.Println("Saving first batch...")
 			s.SaveFilingBatch(batch)
 			i = 0
 		}
@@ -362,5 +363,6 @@ func (ss *SqlSaver) SaveFilingBatch(batch []Filing) {
 	// Commit
 	log.Println("Commiting Transaction...")
 	tx.Commit()
+	log.Println("Transaction committed.")
 
 }
